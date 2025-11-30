@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_physical_exam'
             padding: 30px;
         }
         .form-header {
-            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            background: #941022;
             color: white;
             padding: 20px;
             border-radius: 8px;
@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_physical_exam'
             min-height: 100px;
         }
         .btn-submit {
-            background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+            background: #941022;
             border: none;
             color: white;
             padding: 12px 30px;

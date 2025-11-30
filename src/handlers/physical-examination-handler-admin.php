@@ -229,6 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log("Admin Physical Examination Handler - " . ($should_update ? "Updated" : "Created") . " physical_exam_id: " . $physical_exam_id);
                 
                 // Create blood collection record for admin workflow (only if it doesn't exist)
+                $blood_collection_id = null; // Initialize variable for use in eligibility creation
                 try {
                     // Check if blood collection record already exists
                     $collection_check = curl_init(SUPABASE_URL . '/rest/v1/blood_collection?select=blood_collection_id&physical_exam_id=eq.' . $physical_exam_id . '&limit=1');
@@ -247,6 +248,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($collection_check_http_code === 200) {
                         $collection_check_data = json_decode($collection_check_response, true);
                         $collection_exists = !empty($collection_check_data);
+                        if ($collection_exists) {
+                            $blood_collection_id = $collection_check_data[0]['blood_collection_id'] ?? null;
+                        }
                     }
                     
                     if (!$collection_exists) {
@@ -292,12 +296,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             error_log("Admin Physical Examination Handler - Created blood collection record: " . $blood_collection_id);
                         } else {
                             error_log("Admin Physical Examination Handler - Failed to create blood collection record: HTTP $collection_http_code");
+                            $blood_collection_id = null;
                         }
                     } else {
-                        error_log("Admin Physical Examination Handler - Blood collection record already exists, skipping creation");
+                        // Blood collection already exists, get its ID
+                        $existing_collection_data = json_decode($collection_check_response, true);
+                        $blood_collection_id = !empty($existing_collection_data) ? $existing_collection_data[0]['blood_collection_id'] : null;
+                        error_log("Admin Physical Examination Handler - Blood collection record already exists: " . $blood_collection_id);
                     }
                 } catch (Exception $collection_error) {
                     error_log("Admin Physical Examination Handler - Blood collection creation error: " . $collection_error->getMessage());
+                    $blood_collection_id = null;
                 }
                 
                 // Create eligibility record for admin workflow
@@ -345,7 +354,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $medical_history_data = json_decode($medical_history_response, true);
                     $medical_history_id = !empty($medical_history_data) ? $medical_history_data[0]['medical_history_id'] : null;
                     
-                    // Note: Eligibility records are automatically created by database triggers
+                    // NOTE: Do NOT include blood_collection_id in eligibility record at this stage
+                    // The blood_collection_id should only be added to eligibility when the blood_collection
+                    // form is actually submitted with all the data filled out properly.
+                    // At this point, we only create an empty blood_collection record, so eligibility
+                    // should be created without blood_collection_id.
+                    
+                    // Check if eligibility record already exists
+                    $eligibility_check = curl_init(SUPABASE_URL . '/rest/v1/eligibility?donor_id=eq.' . $data['donor_id'] . '&select=eligibility_id&order=created_at.desc&limit=1');
+                    curl_setopt($eligibility_check, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($eligibility_check, CURLOPT_HTTPHEADER, [
+                        'apikey: ' . SUPABASE_API_KEY,
+                        'Authorization: Bearer ' . SUPABASE_API_KEY,
+                        'Content-Type: application/json'
+                    ]);
+                    $eligibility_check_response = curl_exec($eligibility_check);
+                    $eligibility_check_http_code = curl_getinfo($eligibility_check, CURLINFO_HTTP_CODE);
+                    curl_close($eligibility_check);
+                    
+                    $eligibility_exists = false;
+                    $existing_eligibility_id = null;
+                    if ($eligibility_check_http_code === 200) {
+                        $eligibility_check_data = json_decode($eligibility_check_response, true);
+                        if (!empty($eligibility_check_data) && isset($eligibility_check_data[0]['eligibility_id'])) {
+                            $eligibility_exists = true;
+                            $existing_eligibility_id = $eligibility_check_data[0]['eligibility_id'];
+                        }
+                    }
+                    
+                    $timestamp = date('Y-m-d\TH:i:s.000\Z');
+                    
+                    if ($eligibility_exists) {
+                        // Update existing eligibility record
+                        // NOTE: Do NOT update blood_collection_id here - it should only be set when blood_collection form is submitted
+                        $updateData = [
+                            'physical_exam_id' => $physical_exam_id,
+                            'status' => $status,
+                            'updated_at' => $timestamp,
+                            'end_date' => $end_date_formatted
+                        ];
+                        
+                        if ($screening_id) $updateData['screening_id'] = $screening_id;
+                        if ($medical_history_id) $updateData['medical_history_id'] = $medical_history_id;
+                        // Do NOT set blood_collection_id here - it will be added when blood_collection is submitted
+                        if ($blood_type) $updateData['blood_type'] = $blood_type;
+                        if ($donation_type) $updateData['donation_type'] = $donation_type;
+                        
+                        $updateCurl = curl_init(SUPABASE_URL . '/rest/v1/eligibility?eligibility_id=eq.' . $existing_eligibility_id);
+                        curl_setopt($updateCurl, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                        curl_setopt($updateCurl, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($updateCurl, CURLOPT_POSTFIELDS, json_encode($updateData));
+                        curl_setopt($updateCurl, CURLOPT_HTTPHEADER, [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json',
+                            'Prefer: return=minimal'
+                        ]);
+                        
+                        $updateResponse = curl_exec($updateCurl);
+                        $updateHttpCode = curl_getinfo($updateCurl, CURLINFO_HTTP_CODE);
+                        curl_close($updateCurl);
+                        
+                        if ($updateHttpCode >= 200 && $updateHttpCode < 300) {
+                            error_log("Admin Physical Examination Handler - Updated eligibility record: " . $existing_eligibility_id);
+                        } else {
+                            error_log("Admin Physical Examination Handler - Failed to update eligibility record: HTTP $updateHttpCode");
+                        }
+                    } else {
+                        // Create new eligibility record
+                        // NOTE: Do NOT include blood_collection_id - it will be added when blood_collection form is submitted
+                        $newEligibilityData = [
+                            'donor_id' => $data['donor_id'],
+                            'physical_exam_id' => $physical_exam_id,
+                            'status' => $status,
+                            'created_at' => $timestamp,
+                            'updated_at' => $timestamp,
+                            'start_date' => $timestamp,
+                            'end_date' => $end_date_formatted
+                        ];
+                        
+                        if ($screening_id) $newEligibilityData['screening_id'] = $screening_id;
+                        if ($medical_history_id) $newEligibilityData['medical_history_id'] = $medical_history_id;
+                        // Do NOT set blood_collection_id here - it will be added when blood_collection is submitted
+                        if ($blood_type) $newEligibilityData['blood_type'] = $blood_type;
+                        if ($donation_type) $newEligibilityData['donation_type'] = $donation_type;
+                        
+                        $createCurl = curl_init(SUPABASE_URL . '/rest/v1/eligibility');
+                        curl_setopt($createCurl, CURLOPT_POST, true);
+                        curl_setopt($createCurl, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($createCurl, CURLOPT_POSTFIELDS, json_encode($newEligibilityData));
+                        curl_setopt($createCurl, CURLOPT_HTTPHEADER, [
+                            'apikey: ' . SUPABASE_API_KEY,
+                            'Authorization: Bearer ' . SUPABASE_API_KEY,
+                            'Content-Type: application/json',
+                            'Prefer: return=representation'
+                        ]);
+                        
+                        $createResponse = curl_exec($createCurl);
+                        $createHttpCode = curl_getinfo($createCurl, CURLINFO_HTTP_CODE);
+                        curl_close($createCurl);
+                        
+                        if ($createHttpCode === 201) {
+                            $createData = json_decode($createResponse, true);
+                            $new_eligibility_id = !empty($createData) ? $createData[0]['eligibility_id'] : null;
+                            error_log("Admin Physical Examination Handler - Created eligibility record: " . $new_eligibility_id);
+                        } else {
+                            error_log("Admin Physical Examination Handler - Failed to create eligibility record: HTTP $createHttpCode - " . $createResponse);
+                        }
+                    }
                     
                     // Cache invalidation will be handled by the frontend refresh
                     error_log("Admin Physical Examination Handler - Physical examination completed for donor: " . $data['donor_id']);

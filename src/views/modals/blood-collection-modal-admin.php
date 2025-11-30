@@ -10,7 +10,7 @@
 <div class="modal fade" id="bloodCollectionModalAdmin" tabindex="-1" aria-labelledby="bloodCollectionModalAdminLabel" aria-hidden="true" style="z-index: 1060;">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <div class="d-flex align-items-center">
                     <div class="me-3">
                         <i class="fas fa-tint fa-2x text-white"></i>
@@ -23,23 +23,19 @@
                 <button type="button" class="btn-close btn-close-white blood-close-btn-admin" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <!-- Progress Indicator (4 steps) -->
+            <!-- Progress Indicator (3 steps - Step 1 Bag Selection removed) -->
             <div class="blood-progress-container" style="padding: 1rem 1.5rem 0.5rem; background: #fff;">
                 <div class="blood-progress-steps" style="display: flex; gap: 10px;">
-                    <div class="blood-step active" data-step="1" style="display: flex; align-items: center; gap: 6px; opacity: 1; font-weight: 600;">
+                    <div class="blood-step active" data-step="2" style="display: flex; align-items: center; gap: 6px; opacity: 1; font-weight: 600;">
                         <div class="blood-step-number" style="width: 26px; height: 26px; border-radius: 50%; background: #b22222; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600;">1</div>
-                        <div class="blood-step-label">Bag Selection</div>
-                    </div>
-                    <div class="blood-step" data-step="2" style="display: flex; align-items: center; gap: 6px; opacity: 0.6;">
-                        <div class="blood-step-number" style="width: 26px; height: 26px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: 600;">2</div>
                         <div class="blood-step-label">Collection Details</div>
                     </div>
                     <div class="blood-step" data-step="3" style="display: flex; align-items: center; gap: 6px; opacity: 0.6;">
-                        <div class="blood-step-number" style="width: 26px; height: 26px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: 600;">3</div>
+                        <div class="blood-step-number" style="width: 26px; height: 26px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: 600;">2</div>
                         <div class="blood-step-label">Timing</div>
                     </div>
                     <div class="blood-step" data-step="4" style="display: flex; align-items: center; gap: 6px; opacity: 0.6;">
-                        <div class="blood-step-number" style="width: 26px; height: 26px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: 600;">4</div>
+                        <div class="blood-step-number" style="width: 26px; height: 26px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: 600;">3</div>
                         <div class="blood-step-label">Review</div>
                     </div>
                 </div>
@@ -48,14 +44,22 @@
                 </div>
             </div>
 
-            <div class="modal-body" style="padding: 1.5rem; background-color: #ffffff; max-height: 70vh; overflow-y: auto;">
+            <div class="modal-body" style="padding: 1.5rem; background-color: #ffffff; max-height: 70vh; overflow-y: auto; position: relative;">
+                <!-- Loading Spinner Overlay -->
+                <div id="bloodCollectionLoadingOverlay" class="blood-loading-overlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9); z-index: 1000; border-radius: 0 0 15px 15px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                    <div class="spinner-border text-danger" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted" style="font-size: 1rem;">Loading collection data...</p>
+                </div>
                 <form id="bloodCollectionFormAdmin">
                     <input type="hidden" name="donor_id" value="">
                     <input type="hidden" name="physical_exam_id" value="">
                     <input type="hidden" name="amount_taken" value="1">
+                    <input type="hidden" name="blood_bag_type" value="Single">
 
-                    <!-- Step 1: Bag Selection -->
-                    <div class="blood-step-content-admin active" id="blood-step-1-admin" data-step="1">
+                    <!-- Step 1: Bag Selection (Hidden - automatically set to "Single") -->
+                    <div class="blood-step-content-admin" id="blood-step-1-admin" data-step="1" style="display: none !important;">
                         <div class="blood-step-title mb-4">
                             <h6><i class="fas fa-tint me-2 text-danger"></i>Blood Bag Selection</h6>
                             <p class="text-muted mb-4">Select the appropriate blood bag type for collection</p>
@@ -108,8 +112,8 @@
                         </div>
                     </div>
 
-                    <!-- Step 2: Collection Details -->
-                    <div class="blood-step-content-admin" id="blood-step-2-admin" data-step="2" style="display: none;">
+                    <!-- Step 2: Collection Details (Now Step 1) -->
+                    <div class="blood-step-content-admin active" id="blood-step-2-admin" data-step="2">
                         <div class="blood-step-title mb-4">
                             <h6><i class="fas fa-clipboard-list me-2 text-danger"></i>Collection Details</h6>
                             <p class="text-muted mb-4">Enter collection information</p>
@@ -142,6 +146,11 @@
                             <p class="text-muted mb-4">Record the start and end times of collection</p>
                         </div>
                         <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="blood-collection-date-step3-admin" class="form-label"><strong>Collection Date</strong></label>
+                                <input type="text" class="form-control" id="blood-collection-date-step3-admin" name="collection_date_display" readonly style="background-color: #f8f9fa; font-weight: 500; color: #333;">
+                                <div class="form-text">Date for the collection times below</div>
+                            </div>
                             <div class="col-md-6 mb-3">
                                 <label for="blood-start-time-admin" class="form-label">Start Time *</label>
                                 <input type="time" class="form-control" id="blood-start-time-admin" name="start_time" required>
@@ -162,6 +171,7 @@
                         <div class="collection-summary" style="background: #f8f9fa; border-radius: 10px; padding: 1.5rem;">
                             <div class="row">
                                 <div class="col-md-6">
+                                    <p><strong>Collection Date:</strong> <span id="summary-collection-date-admin">-</span></p>
                                     <p><strong>Bag Type:</strong> <span id="summary-blood-bag-admin">-</span></p>
                                     <p><strong>Serial Number:</strong> <span id="summary-serial-number-admin">-</span></p>
                                 </div>
@@ -275,6 +285,26 @@
 
 .blood-toast-info i {
     color: #17a2b8;
+}
+
+/* Loading Overlay */
+.blood-loading-overlay {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 1000;
+    border-radius: 0 0 15px 15px;
+}
+
+.blood-loading-overlay.hidden {
+    display: none !important;
 }
 </style>
 

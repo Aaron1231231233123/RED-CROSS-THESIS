@@ -137,7 +137,7 @@ curl_close($ch);
 }
 
 .medical-history-header {
-    background: linear-gradient(135deg, #b22222 0%, #8b0000 100%);
+    background: #941022;
     color: white;
     padding: 20px;
     border-radius: 10px;

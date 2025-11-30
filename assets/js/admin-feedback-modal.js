@@ -39,7 +39,7 @@
                 box-shadow: 0 18px 60px rgba(148, 16, 34, 0.25);
             }
             #adminFeedbackModal .modal-header {
-                background: radial-gradient(circle at top left, #ff6b81, #941022);
+                background: #941022;
                 color: #fff;
                 border-bottom: none;
                 border-radius: 16px 16px 0 0;
@@ -284,7 +284,8 @@
 
     window.adminModal = {
         alert: adminAlert,
-        confirm: adminConfirm
+        confirm: adminConfirm,
+        prompt: null // Will be set after prompt function is defined
     };
 
     window.adminAlert = adminAlert;
@@ -310,5 +311,100 @@
 
     window.requestCloseWithoutSavingConfirmation = requestCloseWithoutSaving;
     window.adminUnsavedCloseConfirm = requestCloseWithoutSaving;
+
+    // Custom prompt function
+    function showPrompt(message, options) {
+        const normalized = typeof options === 'object' && options !== null ? options : {};
+        const defaultValue = normalized.defaultValue || '';
+        const placeholder = normalized.placeholder || '';
+        
+        return new Promise((resolve) => {
+            // Create a temporary prompt modal
+            const promptModalId = 'adminPromptModal';
+            let promptModal = document.getElementById(promptModalId);
+            
+            if (!promptModal) {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `
+                    <div class="modal fade" id="${promptModalId}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title mb-0">${normalized.title || 'Input Required'}</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-3">${message}</p>
+                                    <input type="text" class="form-control" id="adminPromptInput" placeholder="${placeholder}" value="${defaultValue}">
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-danger" id="adminPromptConfirm">OK</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                promptModal = wrapper.firstElementChild;
+                document.body.appendChild(promptModal);
+                
+                // Apply same styles as adminFeedbackModal
+                const style = document.createElement('style');
+                style.textContent = `
+                    #${promptModalId} .modal-content {
+                        border: none;
+                        border-radius: 16px;
+                        box-shadow: 0 18px 60px rgba(148, 16, 34, 0.25);
+                    }
+                    #${promptModalId} .modal-header {
+                        background: #941022;
+                        color: #fff;
+                        border-bottom: none;
+                        border-radius: 16px 16px 0 0;
+                    }
+                `;
+                document.head.appendChild(style);
+                
+                const confirmBtn = promptModal.querySelector('#adminPromptConfirm');
+                const input = promptModal.querySelector('#adminPromptInput');
+                const bsModal = new bootstrap.Modal(promptModal);
+                
+                promptModal.addEventListener('hidden.bs.modal', () => {
+                    promptModal.remove();
+                }, { once: true });
+                
+                confirmBtn.addEventListener('click', () => {
+                    const value = input.value.trim();
+                    bsModal.hide();
+                    resolve(value || null);
+                });
+                
+                promptModal.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && e.target === input) {
+                        confirmBtn.click();
+                    }
+                });
+                
+                input.focus();
+                input.select();
+                bsModal.show();
+            }
+        });
+    }
+
+    function adminPrompt(message, options) {
+        return showPrompt(message, options);
+    }
+
+    if (!window.adminModal) {
+        window.adminModal = {};
+    }
+    window.adminModal.prompt = adminPrompt;
+    window.adminPrompt = adminPrompt;
+    
+    // Override native prompt
+    window.prompt = function(message, defaultValue) {
+        return adminPrompt(message, { defaultValue: defaultValue || '', title: 'Input Required' });
+    };
 })(window, document);
 

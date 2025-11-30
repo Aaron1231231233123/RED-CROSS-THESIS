@@ -10,7 +10,7 @@
 <div class="modal fade" id="deferDonorModal" tabindex="-1" aria-labelledby="deferDonorModalLabel" aria-hidden="true" style="z-index: 1070 !important;" data-bs-backdrop="false">
     <div class="modal-dialog modal-dialog-centered" style="z-index: 1071 !important;">
         <div class="modal-content" style="border-radius: 15px; border: none; z-index: 1072 !important; position: relative;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="deferDonorModalLabel">
                     <i class="fas fa-ban me-2"></i>
                     Defer Donor
@@ -174,7 +174,7 @@
 <div class="modal fade" id="deferralConfirmedModal" tabindex="-1" aria-labelledby="deferralConfirmedModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" style="z-index: 99999 !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important;">
     <div class="modal-dialog modal-dialog-centered" style="z-index: 100000 !important; position: relative !important;">
         <div class="modal-content" style="border-radius: 15px; border: none; z-index: 100001 !important; position: relative !important;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #28a745; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="deferralConfirmedModalLabel">
                     <i class="fas fa-check-circle me-2"></i>
                     Deferral Recorded Successfully

@@ -11,6 +11,10 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// Set count_only parameter to fetch ALL pending donors for accurate count
+// This ensures we get the complete count, not just the first batch
+$_GET['count_only'] = '1';
+
 // Include the donation_pending module
 include_once __DIR__ . '/../Dashboards/module/donation_pending.php';
 

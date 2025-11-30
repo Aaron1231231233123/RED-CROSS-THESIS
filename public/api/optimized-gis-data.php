@@ -25,8 +25,8 @@ function getOptimizedGISData($bloodTypeFilter = 'all') {
         }
         
         // Get approved/eligible donors from eligibility table
-        // Only show donors with status='approved' or status='eligible'
-        $eligibilityQuery = "eligibility?select=donor_id,blood_type,status&status=in.(approved,eligible)";
+        // ROOT CAUSE FIX: Only show donors with status='approved' or 'eligible' AND blood_collection_id is set (complete process)
+        $eligibilityQuery = "eligibility?select=donor_id,blood_type,status,blood_collection_id&status=in.(approved,eligible)&blood_collection_id=not.is.null";
         if ($bloodTypeFilter !== 'all' && !empty($bloodTypeFilter)) {
             $eligibilityQuery .= "&blood_type=eq." . urlencode($bloodTypeFilter);
         }
@@ -36,9 +36,13 @@ function getOptimizedGISData($bloodTypeFilter = 'all') {
         
         if (!empty($eligibilityResponse['data'])) {
             foreach ($eligibilityResponse['data'] as $elig) {
-                $eligibleDonors[$elig['donor_id']] = true;
-                if (!empty($elig['blood_type'])) {
-                    $donorBloodTypes[$elig['donor_id']] = $elig['blood_type'];
+                // FALLBACK: Defensive check - verify blood_collection_id is set
+                $hasBloodCollectionId = !empty($elig['blood_collection_id'] ?? null);
+                if ($hasBloodCollectionId) {
+                    $eligibleDonors[$elig['donor_id']] = true;
+                    if (!empty($elig['blood_type'])) {
+                        $donorBloodTypes[$elig['donor_id']] = $elig['blood_type'];
+                    }
                 }
             }
         }
@@ -105,7 +109,8 @@ function getOptimizedGISData($bloodTypeFilter = 'all') {
 function getFallbackGISData($bloodTypeFilter = 'all') {
     try {
         // Get approved/eligible donors from eligibility table
-        $eligibilityQuery = "eligibility?select=donor_id,blood_type,status&status=in.(approved,eligible)";
+        // ROOT CAUSE FIX: Only show donors with status='approved' or 'eligible' AND blood_collection_id is set (complete process)
+        $eligibilityQuery = "eligibility?select=donor_id,blood_type,status,blood_collection_id&status=in.(approved,eligible)&blood_collection_id=not.is.null";
         if ($bloodTypeFilter !== 'all' && !empty($bloodTypeFilter)) {
             $eligibilityQuery .= "&blood_type=eq." . urlencode($bloodTypeFilter);
         }
@@ -115,9 +120,13 @@ function getFallbackGISData($bloodTypeFilter = 'all') {
         
         if (!empty($eligibilityResponse['data'])) {
             foreach ($eligibilityResponse['data'] as $elig) {
-                $eligibleDonors[$elig['donor_id']] = true;
-                if (!empty($elig['blood_type'])) {
-                    $donorBloodTypes[$elig['donor_id']] = $elig['blood_type'];
+                // FALLBACK: Defensive check - verify blood_collection_id is set
+                $hasBloodCollectionId = !empty($elig['blood_collection_id'] ?? null);
+                if ($hasBloodCollectionId) {
+                    $eligibleDonors[$elig['donor_id']] = true;
+                    if (!empty($elig['blood_type'])) {
+                        $donorBloodTypes[$elig['donor_id']] = $elig['blood_type'];
+                    }
                 }
             }
         }

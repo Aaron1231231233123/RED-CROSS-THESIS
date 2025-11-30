@@ -1702,7 +1702,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
       document.getElementById('rescheduleRequestBtn').onclick = function() {
         var requestId = document.getElementById('insufficientRequestId') ? document.getElementById('insufficientRequestId').value : null;
         if (!requestId) {
-          alert('Request ID not found.');
+          if (window.adminModal && window.adminModal.alert) {
+            window.adminModal.alert('Request ID not found.');
+          } else {
+            console.error('Admin modal not available');
+          }
           return;
         }
         // Send AJAX request to reschedule
@@ -1714,14 +1718,27 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            alert('Request has been rescheduled for 3 days later.');
-            window.location.reload();
+            if (window.adminModal && window.adminModal.alert) {
+              window.adminModal.alert('Request has been rescheduled for 3 days later.').then(() => {
+                window.location.reload();
+              });
+            } else {
+              window.location.reload();
+            }
           } else {
-            alert('Failed to reschedule: ' + (data.error || 'Unknown error'));
+            if (window.adminModal && window.adminModal.alert) {
+              window.adminModal.alert('Failed to reschedule: ' + (data.error || 'Unknown error'));
+            } else {
+              console.error('Admin modal not available');
+            }
           }
         })
         .catch(err => {
-          alert('Error: ' + err);
+          if (window.adminModal && window.adminModal.alert) {
+            window.adminModal.alert('Error: ' + err);
+          } else {
+            console.error('Admin modal not available');
+          }
         });
       };
     });
@@ -2810,7 +2827,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 window.openAdminDonorRegistrationModal();
             } else {
                 console.error('Admin donor registration modal not available yet');
-                alert('Registration modal is still loading. Please try again in a moment.');
+                if (window.adminModal && window.adminModal.alert) {
+                    window.adminModal.alert('Registration modal is still loading. Please try again in a moment.');
+                } else {
+                    console.error('Admin modal not available');
+                }
             }
         };
 
@@ -2946,7 +2967,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 })
                 .catch(error => {
                     console.error('Reserve error:', error);
-                    alert(error.message || 'Unable to reserve blood units. Please try again.');
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert(error.message || 'Unable to reserve blood units. Please try again.');
+                    } else {
+                        console.error('Admin modal not available');
+                    }
                     button.disabled = false;
                     button.innerHTML = originalText;
                 });
@@ -3068,12 +3093,20 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             handoverConfirmModal.show();
                         }, 300);
                     } else {
-                        alert('Error: ' + (data.error || 'Failed to fetch blood units'));
+                        if (window.adminModal && window.adminModal.alert) {
+                            window.adminModal.alert('Error: ' + (data.error || 'Failed to fetch blood units'));
+                        } else {
+                            console.error('Admin modal not available');
+                        }
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Error fetching blood units:\n' + (error && error.message ? error.message : String(error)));
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert('Error fetching blood units:\n' + (error && error.message ? error.message : String(error)));
+                    } else {
+                        console.error('Admin modal not available');
+                    }
                 })
                 .finally(() => {
                     // Reset button state
@@ -3139,7 +3172,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Error processing handover:\n' + (error && error.message ? error.message : String(error)));
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert('Error processing handover:\n' + (error && error.message ? error.message : String(error)));
+                    } else {
+                        console.error('Admin modal not available');
+                    }
                     // Reset button state
                     confirmBtn.innerHTML = originalText;
                     confirmBtn.disabled = false;

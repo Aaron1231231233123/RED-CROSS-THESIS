@@ -624,7 +624,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                     window.openAdminDonorRegistrationModal();
                 } else {
                     console.error('Admin donor registration modal not available yet');
-                    alert('Registration modal is still loading. Please try again in a moment.');
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert('Registration modal is still loading. Please try again in a moment.');
+                    } else {
+                        console.error('Admin modal not available');
+                    }
                 }
             };
 
@@ -910,7 +914,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             }, 2000);
                         }, 300);
                     } else {
-                        alert('Error: ' + data.message);
+                        if (window.adminModal && window.adminModal.alert) {
+                            window.adminModal.alert('Error: ' + data.message);
+                        } else {
+                            console.error('Admin modal not available');
+                        }
                         // Reset button
                         deactivateBtn.innerHTML = originalText;
                         deactivateBtn.disabled = false;
@@ -918,7 +926,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('An error occurred while deactivating the user.');
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert('An error occurred while deactivating the user.');
+                    } else {
+                        console.error('Admin modal not available');
+                    }
                     // Reset button
                     deactivateBtn.innerHTML = originalText;
                     deactivateBtn.disabled = false;
@@ -965,7 +977,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                             }, 2000);
                         }, 300);
                     } else {
-                        alert('Error: ' + data.message);
+                        if (window.adminModal && window.adminModal.alert) {
+                            window.adminModal.alert('Error: ' + data.message);
+                        } else {
+                            console.error('Admin modal not available');
+                        }
                         // Reset button
                         activateBtn.innerHTML = originalText;
                         activateBtn.disabled = false;
@@ -973,7 +989,11 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4 {
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('An error occurred while activating the user.');
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert('An error occurred while activating the user.');
+                    } else {
+                        console.error('Admin modal not available');
+                    }
                     // Reset button
                     activateBtn.innerHTML = originalText;
                     activateBtn.disabled = false;

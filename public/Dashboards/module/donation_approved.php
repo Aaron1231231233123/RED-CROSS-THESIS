@@ -27,16 +27,21 @@ try {
 	$offset = isset($GLOBALS['DONATION_OFFSET']) ? intval($GLOBALS['DONATION_OFFSET']) : 0;
 
     // Base eligibility query with keyset support when perf mode + cursor provided
+    // ROOT CAUSE FIX: Only show eligibility records with complete process (blood_collection_id must be set)
+    // This ensures donors only appear as "Approved" when they have completed the full workflow
     $baseParams = [
-        'select' => 'eligibility_id,donor_id,blood_type,donation_type,created_at,status,collection_successful',
+        'select' => 'eligibility_id,donor_id,blood_type,donation_type,created_at,status,collection_successful,blood_collection_id',
         'or' => '(status.eq.approved,status.eq.eligible,collection_successful.eq.true)',
         'order' => 'created_at.desc,eligibility_id.desc',
         'limit' => $limit
     ];
+    
+    // CRITICAL: Add blood_collection_id filter - must be done separately due to Supabase query syntax
+    // Build base URL with status filter
     if (!$perfMode || !$cursorTs) {
         // Offset fallback
         $baseParams['offset'] = $offset;
-        $queryUrl = SUPABASE_URL . "/rest/v1/eligibility?" . http_build_query($baseParams);
+        $queryUrl = SUPABASE_URL . "/rest/v1/eligibility?" . http_build_query($baseParams) . "&blood_collection_id=not.is.null";
     } else {
         // Keyset: build OR condition based on cursor direction
         $ts = rawurlencode($cursorTs);
@@ -50,7 +55,7 @@ try {
         }
         // http_build_query URL-encodes values automatically
         $baseParams['or'] = $baseParams['or']; // keep status filter
-        $queryUrl = SUPABASE_URL . "/rest/v1/eligibility?" . http_build_query($baseParams) . "&or=" . rawurlencode($or);
+        $queryUrl = SUPABASE_URL . "/rest/v1/eligibility?" . http_build_query($baseParams) . "&or=" . rawurlencode($or) . "&blood_collection_id=not.is.null";
     }
 
 	$optimizedCurl = curl_init();
@@ -124,10 +129,164 @@ try {
 				foreach ($donorData as $donor) { $donorLookup[$donor['donor_id']] = $donor; }
 			}
 		}
+		
+		// ROOT CAUSE FIX: Batch fetch physical exam records to check for deferral/decline status
+		// This ensures donors with "Temporarily Deferred" or "Permanently Deferred" are excluded from approved list
+		$physicalExamLookup = [];
+		$declinedScreeningLookup = [];
+		$declinedMedicalLookup = [];
+		if (!empty($donorIds)) {
+			$donorIdsParam = implode(',', $donorIds);
+			
+			// Fetch physical exam records with deferral/decline remarks
+			$physicalCurl = curl_init();
+			curl_setopt_array($physicalCurl, [
+				CURLOPT_URL => SUPABASE_URL . "/rest/v1/physical_examination?donor_id=in.(" . $donorIdsParam . ")&or=(remarks.eq.Temporarily%20Deferred,remarks.eq.Permanently%20Deferred,remarks.eq.Declined,remarks.eq.Refused)&select=donor_id,remarks&order=created_at.desc",
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_HTTPHEADER => [
+					"apikey: " . SUPABASE_API_KEY,
+					"Authorization: Bearer " . SUPABASE_API_KEY,
+					"Content-Type: application/json"
+				],
+				CURLOPT_TIMEOUT => 30,
+				CURLOPT_CONNECTTIMEOUT => 10
+			]);
+			$physicalResponse = curl_exec($physicalCurl);
+			$physicalHttpCode = curl_getinfo($physicalCurl, CURLINFO_HTTP_CODE);
+			curl_close($physicalCurl);
+			if ($physicalResponse !== false && $physicalHttpCode === 200) {
+				$physicalData = json_decode($physicalResponse, true) ?: [];
+				foreach ($physicalData as $exam) {
+					$examDonorId = $exam['donor_id'] ?? null;
+					if ($examDonorId && !isset($physicalExamLookup[$examDonorId])) {
+						// Only keep the latest record per donor (already ordered by created_at desc)
+						$physicalExamLookup[$examDonorId] = $exam['remarks'] ?? '';
+					}
+				}
+			}
+			
+			// Fetch screening records with disapproval_reason
+			// Note: screening_form uses donor_form_id, not donor_id
+			$screeningCurl = curl_init();
+			curl_setopt_array($screeningCurl, [
+				CURLOPT_URL => SUPABASE_URL . "/rest/v1/screening_form?donor_form_id=in.(" . $donorIdsParam . ")&disapproval_reason=not.is.null&select=donor_form_id,disapproval_reason&order=created_at.desc",
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_HTTPHEADER => [
+					"apikey: " . SUPABASE_API_KEY,
+					"Authorization: Bearer " . SUPABASE_API_KEY,
+					"Content-Type: application/json"
+				],
+				CURLOPT_TIMEOUT => 30,
+				CURLOPT_CONNECTTIMEOUT => 10
+			]);
+			$screeningResponse = curl_exec($screeningCurl);
+			$screeningHttpCode = curl_getinfo($screeningCurl, CURLINFO_HTTP_CODE);
+			curl_close($screeningCurl);
+			if ($screeningResponse !== false && $screeningHttpCode === 200) {
+				$screeningData = json_decode($screeningResponse, true) ?: [];
+				foreach ($screeningData as $screen) {
+					$screenDonorId = $screen['donor_form_id'] ?? null;
+					if ($screenDonorId && !empty($screen['disapproval_reason']) && !isset($declinedScreeningLookup[$screenDonorId])) {
+						$declinedScreeningLookup[$screenDonorId] = true;
+					}
+				}
+			}
+			
+			// Fetch medical history records with "Not Approved"
+			$medicalCurl = curl_init();
+			curl_setopt_array($medicalCurl, [
+				CURLOPT_URL => SUPABASE_URL . "/rest/v1/medical_history?donor_id=in.(" . $donorIdsParam . ")&medical_approval=eq.Not%20Approved&select=donor_id,medical_approval&order=created_at.desc",
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_HTTPHEADER => [
+					"apikey: " . SUPABASE_API_KEY,
+					"Authorization: Bearer " . SUPABASE_API_KEY,
+					"Content-Type: application/json"
+				],
+				CURLOPT_TIMEOUT => 30,
+				CURLOPT_CONNECTTIMEOUT => 10
+			]);
+			$medicalResponse = curl_exec($medicalCurl);
+			$medicalHttpCode = curl_getinfo($medicalCurl, CURLINFO_HTTP_CODE);
+			curl_close($medicalCurl);
+			if ($medicalResponse !== false && $medicalHttpCode === 200) {
+				$medicalData = json_decode($medicalResponse, true) ?: [];
+				foreach ($medicalData as $med) {
+					$medDonorId = $med['donor_id'] ?? null;
+					if ($medDonorId && !isset($declinedMedicalLookup[$medDonorId])) {
+						$declinedMedicalLookup[$medDonorId] = true;
+					}
+				}
+			}
+		}
 
         foreach ($eligibilityData as $eligibility) {
 			$donorId = $eligibility['donor_id'] ?? null;
 			if (!$donorId || !isset($donorLookup[$donorId])) { continue; }
+			
+			// ROOT CAUSE FIX: Validate that eligibility record has blood_collection_id (complete process)
+			// This is a defensive check in case the query filter didn't work properly
+			$hasBloodCollectionId = !empty($eligibility['blood_collection_id'] ?? null);
+			if (!$hasBloodCollectionId) {
+				// Skip incomplete eligibility records - they shouldn't appear as "Approved"
+				error_log("Approved Donations: Skipping incomplete eligibility record (eligibility_id: " . ($eligibility['eligibility_id'] ?? 'N/A') . ", donor_id: $donorId) - missing blood_collection_id");
+				continue;
+			}
+			
+			// FALLBACK: Additional validation - check status is approved/eligible
+			$eligStatus = strtolower(trim((string)($eligibility['status'] ?? '')));
+			$isApprovedStatus = ($eligStatus === 'approved' || $eligStatus === 'eligible');
+			$collectionSuccessful = isset($eligibility['collection_successful']) && 
+			                        ($eligibility['collection_successful'] === true || 
+			                         $eligibility['collection_successful'] === 'true' || 
+			                         $eligibility['collection_successful'] === 1);
+			
+			// Only include if status is approved/eligible OR collection_successful is true
+			if (!$isApprovedStatus && !$collectionSuccessful) {
+				error_log("Approved Donations: Skipping eligibility record (eligibility_id: " . ($eligibility['eligibility_id'] ?? 'N/A') . ", donor_id: $donorId) - status not approved and collection not successful");
+				continue;
+			}
+			
+			// ROOT CAUSE FIX: Check for deferral/decline status in physical exam, screening, or medical history
+			// Donors with "Temporarily Deferred", "Permanently Deferred", "Declined", or "Refused" should NOT appear in approved list
+			$hasDeferralDeclineStatus = false;
+			$deferralDeclineReason = '';
+			
+			// 1. Check physical exam remarks
+			if (isset($physicalExamLookup[$donorId])) {
+				$remarks = $physicalExamLookup[$donorId];
+				if (in_array($remarks, ['Temporarily Deferred', 'Permanently Deferred', 'Declined', 'Refused'], true)) {
+					$hasDeferralDeclineStatus = true;
+					$deferralDeclineReason = "Physical Exam: $remarks";
+					error_log("Approved Donations: Excluding donor $donorId from approved list - $deferralDeclineReason");
+				}
+			}
+			
+			// 2. Check screening form disapproval
+			if (!$hasDeferralDeclineStatus && isset($declinedScreeningLookup[$donorId])) {
+				$hasDeferralDeclineStatus = true;
+				$deferralDeclineReason = "Screening: Disapproved";
+				error_log("Approved Donations: Excluding donor $donorId from approved list - $deferralDeclineReason");
+			}
+			
+			// 3. Check medical history not approved
+			if (!$hasDeferralDeclineStatus && isset($declinedMedicalLookup[$donorId])) {
+				$hasDeferralDeclineStatus = true;
+				$deferralDeclineReason = "Medical History: Not Approved";
+				error_log("Approved Donations: Excluding donor $donorId from approved list - $deferralDeclineReason");
+			}
+			
+			// 4. Check eligibility status for declined/deferred (defensive check)
+			if (!$hasDeferralDeclineStatus && in_array($eligStatus, ['declined', 'deferred', 'refused', 'ineligible'], true)) {
+				$hasDeferralDeclineStatus = true;
+				$deferralDeclineReason = "Eligibility Status: $eligStatus";
+				error_log("Approved Donations: Excluding donor $donorId from approved list - $deferralDeclineReason");
+			}
+			
+			// Skip donors with any deferral/decline status - they should be in declined/deferred list
+			if ($hasDeferralDeclineStatus) {
+				continue;
+			}
+			
 			$donor = $donorLookup[$donorId];
 			$birthdate = $donor['birthdate'] ?? '';
 			$age = '';

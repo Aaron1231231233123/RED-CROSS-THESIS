@@ -1248,6 +1248,8 @@ h6 {
                                 // Build URL matching developer tool: ../api/get-target-stock-levels.php
                                 $targetStockApiUrl = "{$protocol}://{$host}{$basePath}/api/get-target-stock-levels.php?t=" . time();
                                 
+                                error_log("Home Dashboard - Target Stock API URL: " . $targetStockApiUrl);
+                                
                                 $ch = curl_init($targetStockApiUrl);
                                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                                 curl_setopt($ch, CURLOPT_TIMEOUT, 20);
@@ -1272,8 +1274,15 @@ h6 {
                                         $fetchedLevels = $targetStockData['target_stock_levels'] ?? [];
                                         if (!empty($fetchedLevels)) {
                                             $targetStockLevels = array_merge($targetStockLevels, $fetchedLevels);
+                                            error_log("Home Dashboard - Target Stock Levels loaded: " . json_encode($targetStockLevels));
+                                        } else {
+                                            error_log("Home Dashboard - Target Stock API returned empty target_stock_levels. Full response: " . $targetStockResponse);
                                         }
+                                    } else {
+                                        error_log("Home Dashboard - Target Stock API returned success=false: " . ($targetStockData['error'] ?? 'Unknown error'));
                                     }
+                                } else {
+                                    error_log("Home Dashboard - Target Stock API HTTP Error: Code $httpCode, URL: $targetStockApiUrl");
                                 }
                             } catch (Exception $e) {
                                 error_log("Home Dashboard - Failed to fetch target stock levels: " . $e->getMessage());
@@ -1307,7 +1316,7 @@ h6 {
                             }
                             ?>
                             
-                            <!-- Row 1: O+, A+, B+, AB+ (retain original order/UI) -->
+                            <!-- Blood Type Cards with Target Stock Levels -->
                             <?php
                             $bloodTypeOrder = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'];
                             foreach ($bloodTypeOrder as $typeLabel):
@@ -2881,89 +2890,93 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
     <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script defer src="../../assets/js/admin-feedback-modal.js"></script>
     <script>
-        // Make target stock levels and blood type counts available to JavaScript
-        const targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
-        const bloodTypeCountsData = <?php echo json_encode($bloodTypeCounts); ?>;
-        
-        // Debug: Log target stock levels to console
-        console.log('Home Dashboard - Target Stock Levels loaded:', targetStockLevels);
-        console.log('Home Dashboard - Blood Type Counts:', bloodTypeCountsData);
-        
-        // Function to update blood type cards (similar to blood bank dashboard)
-        function updateBloodTypeCards() {
-            const cards = document.querySelectorAll('[data-blood-type-card]');
-            cards.forEach(card => {
-                const type = card.getAttribute('data-blood-type-card');
-                
-                const countValue = bloodTypeCountsData?.[type] ?? 0;
-                const countEl = card.querySelector('[data-blood-type-count]');
-                if (countEl) {
-                    countEl.textContent = countValue;
-                }
-                
-                // Update target stock display
-                const targetStock = targetStockLevels?.[type] ?? 0;
-                if (card) {
-                    card.setAttribute('data-target-stock', targetStock);
-                    const cardText = card.querySelector('.inventory-system-blood-availability');
-                    if (cardText && targetStock > 0) {
-                        let targetSmall = cardText.querySelector('small.text-muted');
-                        if (!targetSmall || !targetSmall.textContent.includes('Target:')) {
-                            // Create new target stock display
-                            const br = document.createElement('br');
-                            targetSmall = document.createElement('small');
-                            targetSmall.className = 'text-muted';
-                            cardText.appendChild(br);
-                            cardText.appendChild(targetSmall);
-                        }
-                        targetSmall.textContent = `Target: ${targetStock} units`;
-                    } else if (cardText && targetStock === 0) {
-                        // Remove target stock display if not available
-                        const targetSmall = cardText.querySelector('small.text-muted');
-                        if (targetSmall && targetSmall.textContent.includes('Target:')) {
-                            const br = targetSmall.previousSibling;
-                            if (br && br.nodeName === 'BR') {
-                                br.remove();
-                            }
-                            targetSmall.remove();
-                        }
-                    }
-                }
-                
-                const dangerIcon = card.querySelector('[data-danger-icon]');
-                if (dangerIcon) {
-                    // Only check target stock level (removed lowThreshold check)
-                    const isBelowTarget = targetStock > 0 && countValue < targetStock;
-                    // Debug logging
-                    if (type === 'A+' || type === 'A-') {
-                        console.log(`Home Dashboard - Blood Type ${type}: Current=${countValue}, Target=${targetStock}, BelowTarget=${isBelowTarget}`);
-                    }
-                    if (isBelowTarget) {
-                        dangerIcon.classList.remove('d-none');
-                        dangerIcon.setAttribute('title', `Current stock (${countValue}) is below target stock level (${targetStock})`);
+        document.addEventListener('DOMContentLoaded', function() {
+            window.showConfirmationModal = function() {
+                if (typeof window.openAdminDonorRegistrationModal === 'function') {
+                    window.openAdminDonorRegistrationModal();
+                } else {
+                    console.error('Admin donor registration modal not available yet');
+                    if (window.adminModal && window.adminModal.alert) {
+                        window.adminModal.alert('Registration modal is still loading. Please try again in a moment.');
                     } else {
-                        dangerIcon.classList.add('d-none');
+                        console.error('Admin modal not available');
                     }
                 }
-            });
-        }
-        
-    document.addEventListener('DOMContentLoaded', function() {
-        window.showConfirmationModal = function() {
-            if (typeof window.openAdminDonorRegistrationModal === 'function') {
-                window.openAdminDonorRegistrationModal();
-            } else {
-                console.error('Admin donor registration modal not available yet');
-                alert('Registration modal is still loading. Please try again in a moment.');
-            }
-        };
-        
+            };
+            
             // Function to open QR Registration page
             window.openQRRegistration = function() {
                 const qrRegistrationUrl = '../../src/views/forms/qr-registration.php';
                 // Open in a new window/tab
                 window.open(qrRegistrationUrl, 'QRRegistration', 'width=1200,height=800,scrollbars=yes,resizable=yes');
             };
+            
+            // Make target stock levels and blood type counts available to JavaScript
+            const targetStockLevels = <?php echo json_encode($targetStockLevels); ?>;
+            const bloodTypeCountsData = <?php echo json_encode($bloodTypeCounts); ?>;
+            
+            // Debug: Log target stock levels to console
+            console.log('Home Dashboard - Target Stock Levels loaded:', targetStockLevels);
+            console.log('Home Dashboard - Blood Type Counts:', bloodTypeCountsData);
+            
+            // Function to update blood type cards (similar to blood bank dashboard)
+            function updateBloodTypeCards() {
+                const cards = document.querySelectorAll('[data-blood-type-card]');
+                cards.forEach(card => {
+                    const type = card.getAttribute('data-blood-type-card');
+                    
+                    const countValue = bloodTypeCountsData?.[type] ?? 0;
+                    const countEl = card.querySelector('[data-blood-type-count]');
+                    if (countEl) {
+                        countEl.textContent = countValue;
+                    }
+                    
+                    // Update target stock display
+                    const targetStock = targetStockLevels?.[type] ?? 0;
+                    if (card) {
+                        card.setAttribute('data-target-stock', targetStock);
+                        const cardText = card.querySelector('.inventory-system-blood-availability');
+                        if (cardText && targetStock > 0) {
+                            let targetSmall = cardText.querySelector('small.text-muted');
+                            if (!targetSmall || !targetSmall.textContent.includes('Target:')) {
+                                // Create new target stock display
+                                const br = document.createElement('br');
+                                targetSmall = document.createElement('small');
+                                targetSmall.className = 'text-muted';
+                                cardText.appendChild(br);
+                                cardText.appendChild(targetSmall);
+                            }
+                            targetSmall.textContent = `Target: ${targetStock} units`;
+                        } else if (cardText && targetStock === 0) {
+                            // Remove target stock display if not available
+                            const targetSmall = cardText.querySelector('small.text-muted');
+                            if (targetSmall && targetSmall.textContent.includes('Target:')) {
+                                const br = targetSmall.previousSibling;
+                                if (br && br.nodeName === 'BR') {
+                                    br.remove();
+                                }
+                                targetSmall.remove();
+                            }
+                        }
+                    }
+                    
+                    const dangerIcon = card.querySelector('[data-danger-icon]');
+                    if (dangerIcon) {
+                        // Only check target stock level (removed lowThreshold check)
+                        const isBelowTarget = targetStock > 0 && countValue < targetStock;
+                        // Debug logging
+                        if (type === 'A+' || type === 'A-') {
+                            console.log(`Home Dashboard - Blood Type ${type}: Current=${countValue}, Target=${targetStock}, BelowTarget=${isBelowTarget}`);
+                        }
+                        if (isBelowTarget) {
+                            dangerIcon.classList.remove('d-none');
+                            dangerIcon.setAttribute('title', `Current stock (${countValue}) is below target stock level (${targetStock})`);
+                        } else {
+                            dangerIcon.classList.add('d-none');
+                        }
+                    }
+                });
+            }
             
             // Update blood type cards on page load
             updateBloodTypeCards();
@@ -3051,7 +3064,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
             const time = driveTime?.value || '';
             
             if (!venue || !date || !time) {
-                alert('Please fill in all fields: Venue, Date, and Time');
+                if (window.adminModal && window.adminModal.alert) {
+                    window.adminModal.alert('Please fill in all fields: Venue, Date, and Time');
+                } else {
+                    console.error('Admin modal not available');
+                }
                 return;
             }
             
@@ -3107,7 +3124,11 @@ if (($totalDonorCount > 0 || !empty($heatmapData)) && !$postgisAvailable) {
                 
             } catch (error) {
                 console.error('Notification error:', error);
-                alert('Failed to send notifications: ' + error.message);
+                if (window.adminModal && window.adminModal.alert) {
+                    window.adminModal.alert('Failed to send notifications: ' + error.message);
+                } else {
+                    console.error('Admin modal not available');
+                }
             } finally {
                 scheduleBtn.disabled = false;
                 scheduleBtn.classList.remove('btn-loading');

@@ -10,7 +10,7 @@
 <div class="modal fade enhanced-modal" id="medicalHistoryApprovalModal" tabindex="-1" aria-labelledby="medicalHistoryApprovalModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+            <div class="modal-header" style="background: #28a745; color: white;">
                 <h5 class="modal-title" id="medicalHistoryApprovalModalLabel">
                     <i class="fas fa-check-circle me-2"></i>
                     Medical History Approved
@@ -45,7 +45,7 @@
 <div class="modal fade" id="medicalHistoryDeclineModal" tabindex="-1" aria-labelledby="medicalHistoryDeclineModalLabel" aria-hidden="true" data-bs-backdrop="false" style="z-index: 10090 !important; position: fixed !important;">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="medicalHistoryDeclineModalLabel">
                     <i class="fas fa-times-circle me-2"></i>
                     Decline Medical History?
@@ -554,7 +554,7 @@
 <div class="modal fade" id="medicalHistoryDeclineConfirmModal" tabindex="-1" aria-labelledby="medicalHistoryDeclineConfirmModalLabel" aria-hidden="true" style="z-index: 10100 !important; position: fixed !important;">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="medicalHistoryDeclineConfirmModalLabel">
                     <i class="fas fa-question-circle me-2"></i>
                     Confirm Action
@@ -596,7 +596,7 @@
 <div class="modal fade" id="medicalHistoryApproveConfirmModal" tabindex="-1" aria-labelledby="medicalHistoryApproveConfirmLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="medicalHistoryApproveConfirmLabel">
                     <i class="fas fa-question-circle me-2"></i>
                     Please Confirm
@@ -622,7 +622,7 @@
 <div class="modal fade" id="medicalHistoryValidationModal" tabindex="-1" aria-labelledby="medicalHistoryValidationModalLabel" aria-hidden="true" style="z-index: 10110 !important; position: fixed !important;">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="medicalHistoryValidationModalLabel">
                     <i class="fas fa-question-circle me-2"></i>
                     Confirm Action

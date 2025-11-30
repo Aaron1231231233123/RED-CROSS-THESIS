@@ -75,10 +75,18 @@
   };
 
   UnifiedSearch.prototype.bind = function() {
-    if (!this.inputEl) return;
+    if (!this.inputEl) {
+      console.error('UnifiedSearch: Cannot bind - inputEl not found');
+      return;
+    }
+    console.log('UnifiedSearch: Binding input event listener with debounce:', this.debounceMs, 'ms');
     var onInput = debounce(this.onInput.bind(this), this.debounceMs);
     this.inputEl.addEventListener('input', onInput);
-    if (this.categoryEl) this.categoryEl.addEventListener('change', onInput);
+    if (this.categoryEl) {
+      this.categoryEl.addEventListener('change', onInput);
+      console.log('UnifiedSearch: Category change listener bound');
+    }
+    console.log('UnifiedSearch: Event listeners bound successfully');
   };
 
   UnifiedSearch.prototype.onInput = function() {
@@ -146,13 +154,20 @@
   };
 
   UnifiedSearch.prototype.searchBackend = function(query, category) {
+    console.log('UnifiedSearch: searchBackend called with query:', query, 'category:', category);
     if (!this.backend || !this.backend.url) {
-      console.log('UnifiedSearch: No backend URL configured');
+      console.error('UnifiedSearch: No backend URL configured');
       return;
     }
     // Skip API call if query is empty - let the page display its original content
     if (!query || query.trim() === '') {
       console.log('UnifiedSearch: Empty query, skipping backend search');
+      // Hide loading spinner
+      var searchLoading = document.getElementById('searchLoading');
+      if (searchLoading) searchLoading.style.display = 'none';
+      // Clear search info
+      var searchInfo = document.getElementById('searchInfo');
+      if (searchInfo) searchInfo.textContent = '';
       // Call onClear callback if provided to restore original content
       if (this.onClear) {
         console.log('UnifiedSearch: Calling onClear callback');
@@ -179,6 +194,22 @@
     var self = this;
     this.isSearching = true;
     
+    // Show loading spinner
+    var searchLoading = document.getElementById('searchLoading');
+    if (searchLoading) {
+      searchLoading.style.display = 'block';
+      console.log('UnifiedSearch: Loading spinner shown');
+    } else {
+      console.error('UnifiedSearch: searchLoading element not found!');
+    }
+    
+    // Show search info
+    var searchInfo = document.getElementById('searchInfo');
+    if (searchInfo) {
+      searchInfo.textContent = 'Searching...';
+      searchInfo.style.display = 'block';
+    }
+    
     var fullUrl = url + '?' + paramsObj.toString();
     console.log('UnifiedSearch: Calling backend API:', fullUrl);
     
@@ -190,6 +221,17 @@
       .then(function(data) {
         console.log('UnifiedSearch: API response data:', data);
         self.isSearching = false;
+        // Hide loading spinner
+        if (searchLoading) searchLoading.style.display = 'none';
+        
+        // Update search info if no custom renderer
+        if (typeof self.renderResults !== 'function') {
+          var searchInfo = document.getElementById('searchInfo');
+          if (searchInfo && data && Array.isArray(data.results)) {
+            searchInfo.textContent = 'Found ' + data.results.length + ' results';
+          }
+        }
+        
         if (typeof self.renderResults === 'function') {
           self.renderResults(data);
         } else if (self.tableEl && data && Array.isArray(data.results)) {
@@ -216,7 +258,9 @@
       })
       .catch(function(err) { 
         console.error('UnifiedSearch: API error:', err);
-        self.isSearching = false; 
+        self.isSearching = false;
+        // Hide loading spinner on error
+        if (searchLoading) searchLoading.style.display = 'none';
       });
   };
 

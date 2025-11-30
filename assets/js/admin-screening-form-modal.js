@@ -687,6 +687,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Admin screening form submitted successfully:', data);
                 showAdminAlert('Screening data saved successfully!', 'success');
                 
+                // Refresh donor modal if it's open
+                const donorId = window.currentAdminDonorData && window.currentAdminDonorData.donor_id;
+                if (donorId) {
+                    const donorModal = document.getElementById('donorModal');
+                    if (donorModal && donorModal.classList.contains('show')) {
+                        const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${donorId}`;
+                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                            setTimeout(() => {
+                                AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                            }, 500);
+                        } else if (typeof window.fetchDonorDetails === 'function') {
+                            setTimeout(() => {
+                                window.fetchDonorDetails(donorId, eligibilityId);
+                            }, 500);
+                        }
+                    }
+                }
+                
                 // Close the screening modal
                 const screeningModalInstance = bootstrap.Modal.getInstance(document.getElementById('adminScreeningFormModal'));
                 if (screeningModalInstance) {

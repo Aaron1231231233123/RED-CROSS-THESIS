@@ -48,7 +48,7 @@ if (isset($_SESSION['user_id'])) {
 <div class="modal fade" id="physicalExaminationModalAdmin" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg" style="max-width:1100px; width:95%;">
         <div class="modal-content" style="border: none; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-bottom: none;">
+            <div class="modal-header" style="background: #941022; color: white; border-bottom: none;">
                 <h5 class="modal-title"><i class="fas fa-stethoscope me-2"></i>Physical Examination Form - Admin</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>

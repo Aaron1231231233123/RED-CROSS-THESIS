@@ -408,7 +408,7 @@
 }
 
 /* Minimal styles to ensure screening modal layout in admin */
-.screening-modal-header { background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: #fff; }
+.screening-modal-header { background: #941022; color: #fff; }
 .screening-detail-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; }
 .screening-label { font-weight: 600; color: #343a40; margin-bottom: 6px; display: block; }
 .screening-input { width: 100%; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 10px; }

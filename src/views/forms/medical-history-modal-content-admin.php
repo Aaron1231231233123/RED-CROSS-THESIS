@@ -688,7 +688,7 @@ if ($http_code === 200) {
 <div class="modal fade" id="declineMedicalHistoryModal" tabindex="-1" aria-labelledby="declineMedicalHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="declineMedicalHistoryModalLabel">
                     <i class="fas fa-times-circle me-2"></i>
                     Decline Medical History?
@@ -728,7 +728,7 @@ if ($http_code === 200) {
 <div class="modal fade" id="approveMedicalHistoryModal" tabindex="-1" aria-labelledby="approveMedicalHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #28a745; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="approveMedicalHistoryModalLabel">
                     <i class="fas fa-check-circle me-2"></i>
                     Approve Medical History?
@@ -760,7 +760,7 @@ if ($http_code === 200) {
 <div class="modal fade" id="medicalHistoryDeclinedModal" tabindex="-1" aria-labelledby="medicalHistoryDeclinedModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="medicalHistoryDeclinedModalLabel">
                     <i class="fas fa-ban me-2"></i>
                     Medical History Declined
@@ -789,7 +789,7 @@ if ($http_code === 200) {
 <div class="modal fade" id="medicalHistoryApprovedModal" tabindex="-1" aria-labelledby="medicalHistoryApprovedModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #28a745; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="medicalHistoryApprovedModalLabel">
                     <i class="fas fa-check-circle me-2"></i>
                     Medical History Approved
@@ -1640,7 +1640,7 @@ function saveEditedData() {
 <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="errorModalLabel">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     Error
@@ -2043,6 +2043,21 @@ function mhProcessDecline(reason) {
         if (data.success) {
             console.log('Medical history declined successfully');
             
+            // Refresh donor modal if it's open
+            const donorModal = document.getElementById('donorModal');
+            if (donorModal && donorModal.classList.contains('show')) {
+                const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${donorId}`;
+                if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                    setTimeout(() => {
+                        AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                    }, 500);
+                } else if (typeof window.fetchDonorDetails === 'function') {
+                    setTimeout(() => {
+                        window.fetchDonorDetails(donorId, eligibilityId);
+                    }, 500);
+                }
+            }
+            
             // Close decline modal
             const declineModal = bootstrap.Modal.getInstance(document.getElementById('declineMedicalHistoryModal'));
             if (declineModal) {
@@ -2125,46 +2140,75 @@ function mhProcessApproval() {
         if (data.success) {
             console.log('Medical history approved successfully');
             
+            // Refresh donor modal if it's open
+            const donorModal = document.getElementById('donorModal');
+            if (donorModal && donorModal.classList.contains('show')) {
+                const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${donorId}`;
+                if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                    setTimeout(() => {
+                        AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                    }, 500);
+                } else if (typeof window.fetchDonorDetails === 'function') {
+                    setTimeout(() => {
+                        window.fetchDonorDetails(donorId, eligibilityId);
+                    }, 500);
+                }
+            }
+            
             // Close approve modal
             const approveModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryApproveConfirmModal'));
             if (approveModal) {
                 approveModal.hide();
             }
             
-            // Close medical history modal
-            const medicalHistoryModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryModalAdmin'));
-            if (medicalHistoryModal) {
-                medicalHistoryModal.hide();
+            // Close medical history modal immediately with aggressive DOM manipulation
+            const mhModalEl = document.getElementById('medicalHistoryModalAdmin');
+            if (mhModalEl) {
+                // Aggressive force close - use multiple methods simultaneously
+                mhModalEl.classList.remove('show', 'fade');
+                mhModalEl.style.setProperty('display', 'none', 'important');
+                mhModalEl.style.setProperty('visibility', 'hidden', 'important');
+                mhModalEl.style.setProperty('opacity', '0', 'important');
+                mhModalEl.style.setProperty('z-index', '-1', 'important');
+                mhModalEl.setAttribute('aria-hidden', 'true');
+                mhModalEl.removeAttribute('aria-modal');
+                mhModalEl.removeAttribute('role');
+                
+                // Also try Bootstrap hide
+                try {
+                    const modalInstance = bootstrap.Modal.getOrCreateInstance(mhModalEl);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                } catch(e) {
+                    console.warn('Bootstrap hide failed:', e);
+                }
+                
+                // Remove all backdrops immediately
+                document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                    backdrop.style.setProperty('display', 'none', 'important');
+                    backdrop.remove();
+                });
+                
+                // Force body cleanup
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+                
+                // Double-check after a micro-delay
+                requestAnimationFrame(() => {
+                    if (mhModalEl.classList.contains('show') || mhModalEl.style.display !== 'none') {
+                        mhModalEl.classList.remove('show', 'fade');
+                        mhModalEl.style.setProperty('display', 'none', 'important');
+                        mhModalEl.style.setProperty('visibility', 'hidden', 'important');
+                    }
+                    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+                    document.body.classList.remove('modal-open');
+                });
             }
             
-            // Show approve success modal
-            setTimeout(() => {
-                const approvedModal = new bootstrap.Modal(document.getElementById('medicalHistoryApprovedModal'));
-                approvedModal.show();
-                
-                // Add event listener for the proceed button
-                const proceedBtn = document.getElementById('proceedToPhysicalExamBtn');
-                if (proceedBtn) {
-                    // Capture donorId in closure
-                    const capturedDonorId = donorId;
-                    proceedBtn.addEventListener('click', function() {
-                        approvedModal.hide();
-                        setTimeout(() => {
-                            // Medical history completion status will be updated by the PHP processing file
-                        console.log('Medical history form submitted with admin_complete action - is_admin should be updated by PHP');
-                            
-                            // Show medical history completion confirmation
-                            const completionModal = document.getElementById('medicalHistoryCompletionModal');
-                            if (completionModal) {
-                                const modal = new bootstrap.Modal(completionModal);
-                                modal.show();
-                            } else {
-                                console.error('Medical history completion modal not found');
-                            }
-                        }, 300);
-                    });
-                }
-            }, 300);
+            // Donor details will be refreshed by the refreshDonorModalIfOpen call above
+            // No need to show success modal - just close and refresh
             
         } else {
             console.error('Failed to approve medical history:', data.message);

@@ -60,58 +60,37 @@ switch ($action) {
 
             $searchTerm = trim($q);
             
-            // Performance optimization: Always fetch enough data for comprehensive search
-            // This ensures we can search across all fields including computed ones
-            
-            // Fetch donors with search filter if search term provided
+            // Match staff side implementation exactly: Use same query structure as search_account_medical_history/search_helpers.php
+            // Fetch donors with database-level search using Supabase filters
             $select = 'donor_id,surname,first_name,middle_name,registration_channel,prc_donor_number,birthdate';
-            $query = 'donor_form?select=' . $select . '&order=donor_id.desc'; // Order by newest donors first
             
-            // Apply search filter - always search in database for text searches
+            // Apply search filter at database level - match staff side pattern exactly
             if (!empty($searchTerm) && is_numeric($searchTerm)) {
-                // Exact match for numeric ID
-                $query .= '&donor_id=eq.' . intval($searchTerm);
-                // Don't apply limit/offset for exact ID match  
+                // For numeric searches: search both donor_id and prc_donor_number
+                // This allows searching by either the internal ID or PRC donor number
+                $encoded = rawurlencode('%' . $searchTerm . '%');
+                $query = 'donor_form?or=(donor_id.eq.' . intval($searchTerm) . 
+                          ',prc_donor_number.ilike.' . $encoded . 
+                          ')&select=' . $select . '&order=donor_id.desc&limit=5000';
             } else if (!empty($searchTerm)) {
-                // COMPREHENSIVE SEARCH: Only for text searches - fetch multiple batches to ensure ALL donors are searchable
-                // This ensures we can find any donor regardless of their position in the dataset
-                
-                // Strategy: Fetch multiple batches with different orderings to cover all donors
-                // We'll combine results and filter in PHP
-                $query .= '&limit=1000&offset=0'; // Start with first 1000 newest donors
+                // Use Supabase's ilike operator - EXACT match to staff side implementation
+                // Search across surname, first_name, middle_name, and prc_donor_number
+                // This covers donor name searches (surname, first_name, middle_name) and PRC donor number
+                $encoded = rawurlencode('%' . $searchTerm . '%');
+                $query = 'donor_form?or=(surname.ilike.' . $encoded . 
+                          ',first_name.ilike.' . $encoded . 
+                          ',middle_name.ilike.' . $encoded . 
+                          ',prc_donor_number.ilike.' . $encoded . 
+                          ')&select=' . $select . '&order=donor_id.desc&limit=5000';
             } else {
-                // STATUS FILTER BROWSING: No search term - use efficient single query for status filtering
-                // This optimizes LCP when switching between status filters (all, pending, approved, etc.)
-                $query .= '&limit=' . min(1000, (int)($limit * 20)) . '&offset=' . (int)$offset;
+                // No search term - use pagination for status filtering
+                $query = 'donor_form?select=' . $select . '&order=donor_id.desc&limit=' . min(1000, (int)($limit * 20)) . '&offset=' . (int)$offset;
             }
             
+            error_log("SEARCH QUERY: " . $query);
             $donorResp = supabaseRequest($query, 'GET');
-            
-            // COMPREHENSIVE SEARCH: Fetch multiple batches to ensure ALL donors are searchable
-            // This solves the issue where older donors (like 148) were not found when ordering by newest first
-            if (!empty($searchTerm) && !is_numeric($searchTerm)) {
-                $allDonors = $donorResp['data'] ?? [];
-                
-                // Fetch oldest donors (in case newer donors don't match the search)
-                // This ensures older donors like Jinky (148) are included in search results
-                $oldestQuery = str_replace('&order=donor_id.desc', '&order=donor_id.asc', $query);
-                $oldestResp = supabaseRequest($oldestQuery, 'GET');
-                if (isset($oldestResp['data'])) {
-                    $allDonors = array_merge($allDonors, $oldestResp['data']);
-                }
-                
-                // Remove duplicates based on donor_id to avoid processing the same donor twice
-                $uniqueDonors = [];
-                $seenIds = [];
-                foreach ($allDonors as $donor) {
-                    $id = $donor['donor_id'] ?? null;
-                    if ($id && !in_array($id, $seenIds)) {
-                        $uniqueDonors[] = $donor;
-                        $seenIds[] = $id;
-                    }
-                }
-                $donorResp = ['data' => $uniqueDonors];
-            }
+            error_log("SEARCH RESPONSE CODE: " . ($donorResp['code'] ?? 'N/A'));
+            error_log("SEARCH RESPONSE DATA COUNT: " . (isset($donorResp['data']) && is_array($donorResp['data']) ? count($donorResp['data']) : 'N/A'));
             
             // Check if supabaseRequest returned data
             if (!isset($donorResp['data'])) {
@@ -136,12 +115,12 @@ switch ($action) {
             
             $donorIdsStr = implode(',', $donorIds);
             
-            // Fix 2: Align IDs - Ensure donor_form_id and donor_id consistency across related table queries
+            // Match staff side implementation: Use correct ID fields for each table
             // Performance optimization: Batch fetch all related data for these donors with error handling
             try {
                 $eligibilityResp = supabaseRequest("eligibility?donor_id=in.(" . $donorIdsStr . ")&select=donor_id,eligibility_id,status,created_at&order=created_at.desc");
-                // Fix: Use donor_id consistently for screening_form lookup (not donor_form_id)
-                $screeningResp = supabaseRequest("screening_form?donor_id=in.(" . $donorIdsStr . ")&select=screening_id,donor_id,needs_review,disapproval_reason");
+                // CRITICAL FIX: screening_form uses donor_form_id, not donor_id (matching staff side)
+                $screeningResp = supabaseRequest("screening_form?donor_form_id=in.(" . $donorIdsStr . ")&select=screening_id,donor_form_id,needs_review,disapproval_reason");
                 $medicalResp = supabaseRequest("medical_history?donor_id=in.(" . $donorIdsStr . ")&select=donor_id,needs_review,medical_approval,updated_at");
                 $physicalResp = supabaseRequest("physical_examination?donor_id=in.(" . $donorIdsStr . ")&select=physical_exam_id,donor_id,needs_review,remarks");
             } catch (Exception $e) {
@@ -176,9 +155,10 @@ switch ($action) {
             $screeningMap = [];
             if (isset($screeningResp['data']) && is_array($screeningResp['data'])) {
                 foreach ($screeningResp['data'] as $s) {
-                    // Fix: Use donor_id consistently (not donor_form_id)
-                    if (!empty($s['donor_id'])) {
-                        $screeningMap[$s['donor_id']] = [
+                    // CRITICAL FIX: screening_form uses donor_form_id, map it to donor_id for lookup
+                    $donorFormId = $s['donor_form_id'] ?? null;
+                    if (!empty($donorFormId)) {
+                        $screeningMap[$donorFormId] = [
                             'needs_review' => $s['needs_review'] ?? false,
                             'disapproval_reason' => $s['disapproval_reason'] ?? null
                         ];
@@ -300,36 +280,10 @@ switch ($action) {
                     continue;
                 }
                 
-                // Fix 5: Enable incremental fuzzy matching - Ensure substring matches work dynamically
-                // Comprehensive search across all displayable fields
-                if (!empty($searchTerm)) {
-                    $searchTermLower = strtolower($searchTerm);
-                    $matchesSearch = false;
-                    
-                    // Check individual fields for matches (more precise than concatenated string)
-                    $fieldsToSearch = [
-                        (string)$donorId,
-                        $donor['surname'] ?? '',
-                        $donor['first_name'] ?? '',
-                        $donor['middle_name'] ?? '',
-                        $donorType,
-                        $statusText,
-                        $regDisplay,
-                        $donor['registration_channel'] ?? '',
-                        $donor['prc_donor_number'] ?? ''
-                    ];
-                    
-                    foreach ($fieldsToSearch as $field) {
-                        if (strpos(strtolower($field), $searchTermLower) !== false) {
-                            $matchesSearch = true;
-                            break; // Found a match, no need to check other fields
-                        }
-                    }
-                    
-                    if (!$matchesSearch) {
-                        continue; // Skip if no match found
-                    }
-                }
+                // All donors in $donors array already matched database search for basic fields
+                // (surname, first_name, middle_name, prc_donor_number)
+                // For numeric searches, donor_id was already matched in database query
+                // No additional filtering needed - database search is comprehensive
                 
                 // Map to array structure matching table columns
                 $results[] = [
@@ -412,5 +366,6 @@ switch ($action) {
         respond(['success' => false, 'message' => 'Invalid action'], 400);
 }
 ?>
+
 
 

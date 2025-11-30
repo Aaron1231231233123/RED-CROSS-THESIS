@@ -182,11 +182,33 @@ window.AdminDonorModal = (function() {
         })();
         
         // Get phlebotomist action button
+        // ROOT CAUSE FIX: Lock blood collection when any stage is declined/deferred
         const phlebotomistActionButton = (() => {
-            const physicianCompleted = (interviewerMedical.toLowerCase() !== 'pending' && interviewerMedical !== '' && interviewerMedical !== '-') &&
-                                    (interviewerScreening.toLowerCase() !== 'pending' && interviewerScreening !== '' && interviewerScreening !== '-') &&
-                                    (physicianMedical.toLowerCase() !== 'pending' && physicianMedical !== '' && physicianMedical !== '-') &&
-                                    (physicianPhysical.toLowerCase() !== 'pending' && physicianPhysical !== '' && physicianPhysical !== '-');
+            // Check for decline/deferral at any stage
+            const interviewerMedicalLower = String(interviewerMedical || '').toLowerCase();
+            const interviewerScreeningLower = String(interviewerScreening || '').toLowerCase();
+            const physicianMedicalLower = String(physicianMedical || '').toLowerCase();
+            const physicianPhysicalLower = String(physicianPhysical || '').toLowerCase();
+            
+            // Check if any stage has decline/deferral status
+            const hasMedicalHistoryDecline = interviewerMedicalLower.includes('declined') || 
+                                           interviewerMedicalLower.includes('not approved') ||
+                                           physicianMedicalLower.includes('declined') ||
+                                           physicianMedicalLower.includes('not approved');
+            const hasScreeningDecline = interviewerScreeningLower.includes('declined') || 
+                                      interviewerScreeningLower.includes('not approved');
+            const hasPhysicalDeclineDefer = physicianPhysicalLower.includes('declined') ||
+                                          physicianPhysicalLower.includes('temporarily deferred') ||
+                                          physicianPhysicalLower.includes('permanently deferred') ||
+                                          physicianPhysicalLower.includes('refused') ||
+                                          physicianPhysicalLower.includes('not approved');
+            
+            const hasAnyDeclineDefer = hasMedicalHistoryDecline || hasScreeningDecline || hasPhysicalDeclineDefer;
+            
+            const physicianCompleted = (interviewerMedicalLower !== 'pending' && interviewerMedical !== '' && interviewerMedical !== '-') &&
+                                    (interviewerScreeningLower !== 'pending' && interviewerScreening !== '' && interviewerScreening !== '-') &&
+                                    (physicianMedicalLower !== 'pending' && physicianMedical !== '' && physicianMedical !== '-') &&
+                                    (physicianPhysicalLower !== 'pending' && physicianPhysical !== '' && physicianPhysical !== '-');
             
             const isPendingBloodCollection = physicianCompleted &&
                                            (phlebStatus.toLowerCase() === 'pending' || phlebStatus === '' || phlebStatus === '-');
@@ -194,7 +216,19 @@ window.AdminDonorModal = (function() {
                                              phlebStatus.toLowerCase() !== 'pending' && phlebStatus !== '' && phlebStatus !== '-';
             
             let actionButton = '';
-            if (!physicianCompleted) {
+            // ROOT CAUSE FIX: Lock blood collection if any stage is declined/deferred
+            if (hasAnyDeclineDefer) {
+                // Determine which stage caused the lock
+                let lockReason = 'Donor Declined/Deferred';
+                if (hasMedicalHistoryDecline) {
+                    lockReason = 'Medical History Declined';
+                } else if (hasScreeningDecline) {
+                    lockReason = 'Initial Screening Declined';
+                } else if (hasPhysicalDeclineDefer) {
+                    lockReason = 'Physical Examination Declined/Deferred';
+                }
+                actionButton = `<button type="button" class="btn btn-sm btn-outline-secondary circular-btn" title="${lockReason} - Blood Collection Locked" disabled><i class="fas fa-lock"></i></button>`;
+            } else if (!physicianCompleted) {
                 actionButton = `<button type="button" class="btn btn-sm btn-outline-secondary circular-btn" title="Complete Physician Phase First" disabled><i class="fas fa-lock"></i></button>`;
             } else if (isPendingBloodCollection) {
                 actionButton = `<button type="button" class="btn btn-sm btn-outline-primary circular-btn" title="Edit Blood Collection" onclick="editBloodCollection('${donor.donor_id || ''}')"><i class="fas fa-pen"></i></button>`;
@@ -208,6 +242,37 @@ window.AdminDonorModal = (function() {
             }
             return actionButton;
         })();
+        
+        // ROOT CAUSE FIX: Update phlebStatus display to show "Locked" when any stage is declined/deferred
+        const getPhlebStatusDisplay = () => {
+            const interviewerMedicalLower = String(interviewerMedical || '').toLowerCase();
+            const interviewerScreeningLower = String(interviewerScreening || '').toLowerCase();
+            const physicianMedicalLower = String(physicianMedical || '').toLowerCase();
+            const physicianPhysicalLower = String(physicianPhysical || '').toLowerCase();
+            
+            // Check if any stage has decline/deferral status
+            const hasMedicalHistoryDecline = interviewerMedicalLower.includes('declined') || 
+                                           interviewerMedicalLower.includes('not approved') ||
+                                           physicianMedicalLower.includes('declined') ||
+                                           physicianMedicalLower.includes('not approved');
+            const hasScreeningDecline = interviewerScreeningLower.includes('declined') || 
+                                      interviewerScreeningLower.includes('not approved');
+            const hasPhysicalDeclineDefer = physicianPhysicalLower.includes('declined') ||
+                                          physicianPhysicalLower.includes('temporarily deferred') ||
+                                          physicianPhysicalLower.includes('permanently deferred') ||
+                                          physicianPhysicalLower.includes('refused') ||
+                                          physicianPhysicalLower.includes('not approved');
+            
+            const hasAnyDeclineDefer = hasMedicalHistoryDecline || hasScreeningDecline || hasPhysicalDeclineDefer;
+            
+            // If any stage is declined/deferred, show "Locked" instead of "Pending"
+            if (hasAnyDeclineDefer) {
+                return `<span class="badge bg-secondary">Locked</span>`;
+            }
+            
+            // Otherwise, use normal status display
+            return getStatusDisplay(phlebStatus, 'Blood Collection');
+        };
 
         return `
         <div class="row g-3 mb-3">
@@ -243,7 +308,7 @@ window.AdminDonorModal = (function() {
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td class="text-center status-cell py-2">${getStatusDisplay(phlebStatus, 'Blood Collection')}</td>
+                                    <td class="text-center status-cell py-2">${getPhlebStatusDisplay()}</td>
                                     <td class="text-center action-cell py-2">${phlebotomistActionButton}</td>
                                 </tr>
                             </tbody>
@@ -266,64 +331,81 @@ window.AdminDonorModal = (function() {
             window.currentDetailsDonorId = donorId;
             window.currentDetailsEligibilityId = eligibilityId;
 
-            // Update physical_examination needs_review=TRUE and access='2' when admin opens donor modal
-            fetch(`../../assets/php_func/update_physical_exam_admin_access.php?donor_id=${encodeURIComponent(donorId)}`, {
-                method: 'GET',
-                cache: 'no-cache'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log(`Physical examination updated for admin access - donor_id: ${donorId}`);
-                } else {
-                    console.warn(`Failed to update physical examination for admin access:`, data.error);
-                }
-            })
-            .catch(error => {
-                console.warn(`Error updating physical examination for admin access:`, error);
-                // Don't block the modal from opening if this fails
-            });
+            // Immediately show loading state in the modal to ensure it's visible right away
+            const donorDetailsContainer = document.getElementById('donorDetails');
+            if (donorDetailsContainer) {
+                donorDetailsContainer.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
+            }
 
-            // Update blood_collection needs_review=TRUE and access='2' when admin opens donor modal
-            fetch(`../../assets/php_func/admin/update_blood_collection_admin_access.php?donor_id=${encodeURIComponent(donorId)}`, {
-                method: 'GET',
-                cache: 'no-cache'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log(`Blood collection updated for admin access - donor_id: ${donorId}`);
-                } else {
-                    console.warn(`Failed to update blood collection for admin access:`, data.error);
+            // Ensure modal is shown (in case it wasn't shown yet)
+            const donorModal = document.getElementById('donorModal');
+            if (donorModal) {
+                const modalInstance = bootstrap.Modal.getInstance(donorModal) || new bootstrap.Modal(donorModal);
+                if (!donorModal.classList.contains('show')) {
+                    modalInstance.show();
                 }
-            })
-            .catch(error => {
-                console.warn(`Error updating blood collection for admin access:`, error);
-                // Don't block the modal from opening if this fails
-            });
+            }
 
-            // Add cache-busting timestamp to ensure fresh data
-            const timestamp = Date.now();
-            const url = `../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}&_t=${timestamp}`;
-            
-            console.log(`Fetching from URL: ${url}`);
-
-            fetch(url, {
-                method: 'GET',
-                cache: 'no-cache',
-                headers: {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
+            // Use setTimeout to ensure the modal and loading state are rendered before starting the fetch
+            setTimeout(() => {
+                // Update physical_examination needs_review=TRUE and access='2' when admin opens donor modal
+                fetch(`../../assets/php_func/update_physical_exam_admin_access.php?donor_id=${encodeURIComponent(donorId)}`, {
+                    method: 'GET',
+                    cache: 'no-cache'
                 })
+                .then(response => response.json())
                 .then(data => {
-                    const donorDetailsContainer = document.getElementById('donorDetails');
+                    if (data.success) {
+                        console.log(`Physical examination updated for admin access - donor_id: ${donorId}`);
+                    } else {
+                        console.warn(`Failed to update physical examination for admin access:`, data.error);
+                    }
+                })
+                .catch(error => {
+                    console.warn(`Error updating physical examination for admin access:`, error);
+                    // Don't block the modal from opening if this fails
+                });
+
+                // Update blood_collection needs_review=TRUE and access='2' when admin opens donor modal
+                fetch(`../../assets/php_func/admin/update_blood_collection_admin_access.php?donor_id=${encodeURIComponent(donorId)}`, {
+                    method: 'GET',
+                    cache: 'no-cache'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log(`Blood collection updated for admin access - donor_id: ${donorId}`);
+                    } else {
+                        console.warn(`Failed to update blood collection for admin access:`, data.error);
+                    }
+                })
+                .catch(error => {
+                    console.warn(`Error updating blood collection for admin access:`, error);
+                    // Don't block the modal from opening if this fails
+                });
+
+                // Add cache-busting timestamp to ensure fresh data
+                const timestamp = Date.now();
+                const url = `../../assets/php_func/donor_details_api.php?donor_id=${donorId}&eligibility_id=${eligibilityId}&_t=${timestamp}`;
+                
+                console.log(`Fetching from URL: ${url}`);
+
+                fetch(url, {
+                    method: 'GET',
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        const donorDetailsContainer = document.getElementById('donorDetails');
                     if (data.error) {
                         donorDetailsContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
                         return;
@@ -338,11 +420,15 @@ window.AdminDonorModal = (function() {
                     const medicalApproval = medicalHistoryData.medical_approval || '';
                     const hasMedicalHistory = medicalHistoryData && Object.keys(medicalHistoryData).length > 0;
                     
-                    // Determine interviewer medical status
+                    // ROOT CAUSE FIX: Determine interviewer medical status - preserve decline/deferral statuses from API
                     let interviewerMedicalStatus = safe(eligibility.medical_history_status);
+                    const medicalHistoryStatusLower = String(interviewerMedicalStatus || '').toLowerCase();
                     
-                    // Priority: Approved > Completed (if admin completed) > eligibility status
-                    if (medicalApproval.toLowerCase() === 'approved') {
+                    // Check if API returned a decline/deferral status - preserve it
+                    if (medicalHistoryStatusLower.includes('declined') || medicalHistoryStatusLower.includes('not approved')) {
+                        // Keep the decline status from API
+                        interviewerMedicalStatus = interviewerMedicalStatus;
+                    } else if (medicalApproval.toLowerCase() === 'approved') {
                         interviewerMedicalStatus = 'Approved';
                     } else if (isAdminCompleted || hasMedicalHistory) {
                         // If admin completed or medical history exists, show "Completed"
@@ -351,10 +437,11 @@ window.AdminDonorModal = (function() {
                         interviewerMedicalStatus = 'Pending';
                     }
                     
+                    // ROOT CAUSE FIX: Extract statuses from API - these should already contain decline/deferral statuses
                     const interviewerMedical = interviewerMedicalStatus;
-                    const interviewerScreening = safe(eligibility.screening_status);
-                    const physicianMedical = safe(eligibility.review_status);
-                    const physicianPhysical = safe(eligibility.physical_status);
+                    const interviewerScreening = safe(eligibility.screening_status); // Should be "Declined/Not Approved" if declined
+                    const physicianMedical = safe(eligibility.review_status); // Medical history approval status from physician
+                    const physicianPhysical = safe(eligibility.physical_status); // Should be "Temporarily Deferred", "Permanently Deferred", etc. if deferred
                     // Get phlebotomist status - ensure we use the value from API response
                     let phlebStatus = safe(eligibility.collection_status);
                     // If collection_status is empty/pending but we have blood collection data, check it directly
@@ -447,6 +534,7 @@ window.AdminDonorModal = (function() {
                         </div>`;
 
                     // Create status summary
+                    // ROOT CAUSE FIX: Properly detect decline/deferral at each stage and show correct overall status
                     const getOverallStatus = () => {
                         const statusLower = String(eligibilityStatus || '').toLowerCase();
                         const interviewerMedicalLower = String(interviewerMedical || '').toLowerCase();
@@ -455,28 +543,33 @@ window.AdminDonorModal = (function() {
                         const physicianPhysicalLower = String(physicianPhysical || '').toLowerCase();
                         const phlebStatusLower = String(phlebStatus || '').toLowerCase();
 
-                        // Check for declined/deferred/refused status in each stage
-                        if (interviewerMedicalLower.includes('declined') || interviewerMedicalLower.includes('defer') || interviewerMedicalLower.includes('refused') || interviewerMedicalLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'MH', color: 'danger' };
+                        // ROOT CAUSE FIX: Check for declined/deferred/refused status in each stage in priority order
+                        // Priority 1: Medical History (check both interviewer and physician medical)
+                        if (interviewerMedicalLower.includes('declined') || interviewerMedicalLower.includes('not approved') ||
+                            physicianMedicalLower.includes('declined') || physicianMedicalLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'Medical History', color: 'danger' };
                         }
-                        if (interviewerScreeningLower.includes('declined') || interviewerScreeningLower.includes('defer') || interviewerScreeningLower.includes('refused') || interviewerScreeningLower.includes('not approved')) {
+                        
+                        // Priority 2: Initial Screening
+                        if (interviewerScreeningLower.includes('declined') || interviewerScreeningLower.includes('not approved')) {
                             return { status: 'Declined/Not Approved', stage: 'Initial Screening', color: 'danger' };
                         }
-                        if (physicianMedicalLower.includes('declined') || physicianMedicalLower.includes('defer') || physicianMedicalLower.includes('refused') || physicianMedicalLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'MH', color: 'danger' };
-                        }
+                        
+                        // Priority 3: Physical Examination (check for specific deferral types first)
                         if (physicianPhysicalLower.includes('permanently deferred')) {
-                            return { status: 'Permanently Deferred', stage: 'Physical Exam', color: 'danger' };
+                            return { status: 'Permanently Deferred', stage: 'Physical Examination', color: 'danger' };
                         }
                         if (physicianPhysicalLower.includes('temporarily deferred')) {
-                            return { status: 'Temporarily Deferred', stage: 'Physical Exam', color: 'warning' };
+                            return { status: 'Temporarily Deferred', stage: 'Physical Examination', color: 'warning' };
                         }
                         if (physicianPhysicalLower.includes('refused')) {
-                            return { status: 'Refused', stage: 'Physical Exam', color: 'danger' };
+                            return { status: 'Refused', stage: 'Physical Examination', color: 'danger' };
                         }
-                        if (physicianPhysicalLower.includes('declined') || physicianPhysicalLower.includes('defer') || physicianPhysicalLower.includes('not approved')) {
-                            return { status: 'Declined/Not Approved', stage: 'Physical Exam', color: 'danger' };
+                        if (physicianPhysicalLower.includes('declined') || physicianPhysicalLower.includes('not approved')) {
+                            return { status: 'Declined/Not Approved', stage: 'Physical Examination', color: 'danger' };
                         }
+                        
+                        // Priority 4: Blood Collection (should rarely happen if other checks work)
                         if (phlebStatusLower.includes('declined') || phlebStatusLower.includes('defer') || phlebStatusLower.includes('refused') || phlebStatusLower.includes('not approved')) {
                             return { status: 'Declined/Not Approved', stage: 'Blood Collection', color: 'danger' };
                         }
@@ -563,8 +656,12 @@ window.AdminDonorModal = (function() {
                 })
                 .catch(error => {
                     console.error('Error fetching donor details:', error);
-                    document.getElementById('donorDetails').innerHTML = '<div class="alert alert-danger">Error loading donor details. Please try again.</div>';
+                    const errorContainer = document.getElementById('donorDetails');
+                    if (errorContainer) {
+                        errorContainer.innerHTML = '<div class="alert alert-danger">Error loading donor details. Please try again.</div>';
+                    }
                 });
+            }, 0); // Use 0 delay to ensure modal renders first, then fetch
         },
 
         // Get current donor ID
@@ -758,6 +855,20 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                 
                 if (data.success) {
                     console.log('Medical history approved successfully');
+                    // Refresh donor modal if it's open
+                    const donorModal = document.getElementById('donorModal');
+                    if (donorModal && donorModal.classList.contains('show')) {
+                        const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${currentDonorId}`;
+                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                            setTimeout(() => {
+                                AdminDonorModal.fetchDonorDetails(currentDonorId, eligibilityId);
+                            }, 500);
+                        } else if (typeof window.fetchDonorDetails === 'function') {
+                            setTimeout(() => {
+                                window.fetchDonorDetails(currentDonorId, eligibilityId);
+                            }, 500);
+                        }
+                    }
                     // Close approve confirmation modal if open
                     const approveModal = bootstrap.Modal.getInstance(document.getElementById('medicalHistoryApproveConfirmModal'));
                     if (approveModal) {
@@ -765,15 +876,8 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                     }
                     // Close medical history modal
                     closeMedicalHistoryModal();
-                    // Show success modal
-                    setTimeout(() => {
-                        const successModal = document.getElementById('medicalHistoryApprovedModal');
-                        if (successModal) {
-                            const modal = new bootstrap.Modal(successModal);
-                            modal.show();
-                        }
-                        refreshDonorDetailsAfterMHApproval(currentDonorId);
-                    }, 300);
+                    // Refresh donor details - no success modal needed
+                    refreshDonorDetailsAfterMHApproval(currentDonorId);
                 } else {
                     alert('Failed to approve medical history: ' + (data.message || 'Unknown error'));
                 }
@@ -942,6 +1046,20 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                         
                         if (data.success) {
                             console.log('Medical history declined successfully');
+                            // Refresh donor modal if it's open
+                            const donorModal = document.getElementById('donorModal');
+                            if (donorModal && donorModal.classList.contains('show')) {
+                                const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${currentDonorId}`;
+                                if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                                    setTimeout(() => {
+                                        AdminDonorModal.fetchDonorDetails(currentDonorId, eligibilityId);
+                                    }, 500);
+                                } else if (typeof window.fetchDonorDetails === 'function') {
+                                    setTimeout(() => {
+                                        window.fetchDonorDetails(currentDonorId, eligibilityId);
+                                    }, 500);
+                                }
+                            }
                             // Close decline modal
                             modal.hide();
                             // Close medical history modal
@@ -1056,6 +1174,20 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
                                 
                                 if (data.success) {
                                     console.log('Medical history declined successfully');
+                                    // Refresh donor modal if it's open
+                                    const donorModal = document.getElementById('donorModal');
+                                    if (donorModal && donorModal.classList.contains('show')) {
+                                        const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${currentDonorId}`;
+                                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                                            setTimeout(() => {
+                                                AdminDonorModal.fetchDonorDetails(currentDonorId, eligibilityId);
+                                            }, 500);
+                                        } else if (typeof window.fetchDonorDetails === 'function') {
+                                            setTimeout(() => {
+                                                window.fetchDonorDetails(currentDonorId, eligibilityId);
+                                            }, 500);
+                                        }
+                                    }
                                     // Close decline modal
                                     modal.hide();
                                     // Close medical history modal

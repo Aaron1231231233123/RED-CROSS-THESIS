@@ -1702,6 +1702,43 @@ function showApprovedThenReturn(donorId, screeningData) {
         console.warn('[MH] showApprovedThenReturn already active, preventing duplicate call');
         return false;
     }
+    
+    // Check if we're in admin dashboard context - if so, don't show success modal
+    // Admin dashboard handles its own flow without the success modal
+    const isAdminDashboard = window.location.pathname.includes('dashboard-Inventory-System-list-of-donations') ||
+                             window.location.pathname.includes('Dashboard-Inventory-System');
+    
+    if (isAdminDashboard) {
+        console.log('[MH] Admin dashboard context detected, skipping success modal');
+        // Just refresh donor details if modal is open
+        const donorModal = document.getElementById('donorModal');
+        if (donorModal && donorModal.classList.contains('show')) {
+            const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${donorId}`;
+            if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                setTimeout(() => {
+                    AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                }, 500);
+            } else if (typeof window.fetchDonorDetails === 'function') {
+                setTimeout(() => {
+                    window.fetchDonorDetails(donorId, eligibilityId);
+                }, 500);
+            }
+        }
+        // Close medical history modal if open
+        const mhModal = document.getElementById('medicalHistoryModalAdmin') || document.getElementById('medicalHistoryModal');
+        if (mhModal) {
+            const modal = bootstrap.Modal.getInstance(mhModal);
+            if (modal) {
+                modal.hide();
+            } else {
+                mhModal.classList.remove('show');
+                mhModal.setAttribute('aria-hidden', 'true');
+                mhModal.style.display = 'none';
+            }
+        }
+        return false;
+    }
+    
     window.__mhShowApprovedActive = true;
     
     const approvedEl = document.getElementById('medicalHistoryApprovalModal');

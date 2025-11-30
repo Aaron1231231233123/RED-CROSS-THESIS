@@ -760,15 +760,30 @@ class PhysicalExaminationModalAdmin {
                 // Check if both medical history and physical examination are completed
                 this.checkAndUpdateDonorStatus(result.donor_id);
                 
+                // Refresh donor modal if it's open
+                const donorId = result.donor_id;
+                if (donorId) {
+                    const donorModal = document.getElementById('donorModal');
+                    if (donorModal && donorModal.classList.contains('show')) {
+                        const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${donorId}`;
+                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
+                            setTimeout(() => {
+                                AdminDonorModal.fetchDonorDetails(donorId, eligibilityId);
+                            }, 500);
+                        } else if (typeof window.fetchDonorDetails === 'function') {
+                            setTimeout(() => {
+                                window.fetchDonorDetails(donorId, eligibilityId);
+                            }, 500);
+                        }
+                    }
+                }
+                
                 // Close modal after a short delay
                 setTimeout(() => {
                     const modal = bootstrap.Modal.getInstance(document.getElementById('physicalExaminationModalAdmin'));
                     if (modal) {
                         modal.hide();
                     }
-                    
-                    // Refresh the page to ensure all data is synchronized
-                    window.location.reload();
                 }, 800);
             } else {
                 this.showToast(result.message || 'Failed to submit physical examination', 'error');

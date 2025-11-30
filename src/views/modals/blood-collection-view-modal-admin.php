@@ -9,7 +9,7 @@
 <div class="modal fade" id="bloodCollectionViewModalAdmin" tabindex="-1" aria-labelledby="bloodCollectionViewModalAdminLabel" aria-hidden="true" style="z-index: 1070;">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <div class="d-flex align-items-center">
                     <div class="me-3">
                         <i class="fas fa-tint fa-2x text-white"></i>

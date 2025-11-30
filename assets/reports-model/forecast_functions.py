@@ -230,25 +230,3 @@ def _count_params(p: int, d: int, q: int, P: int, D: int, Q: int) -> int:
     return params
 
 
-def get_current_month_target_stock(forecast_demand_df: List[Dict], target_buffer: int = 10) -> Dict[str, int]:
-    """
-    Calculate Target Stock Level per blood type for the current month.
-    Target Stock = Forecast Demand + Target Buffer
-    
-    Args:
-        forecast_demand_df: List of forecast demand results with Blood_Type and Forecast_Demand
-        target_buffer: Target buffer units (default 10 from config)
-    
-    Returns:
-        Dictionary mapping blood_type to target_stock_level
-    """
-    target_stock = {}
-    for row in forecast_demand_df:
-        blood_type = row.get("Blood_Type", "")
-        forecast_demand = float(row.get("Forecast_Demand", 0))
-        target_stock_level = int(round(forecast_demand + target_buffer))
-        if blood_type:
-            target_stock[blood_type] = target_stock_level
-    return target_stock
-
-

@@ -1,7 +1,8 @@
 <?php
 /**
- * API endpoint to get Target Stock Levels per blood type for the current month.
- * Target Stock = Forecast Demand + Target Buffer (10 units)
+ * Target Stock Levels API
+ * Executes the Python forecast script and extracts Target_Stock values
+ * for each blood type from the projected_stock data.
  */
 
 session_start();
@@ -11,7 +12,6 @@ header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 
-// Path to Python script
 $pythonScript = __DIR__ . '/../../assets/reports-model/dashboard_inventory_system_reports_admin.py';
 
 // Detect Python executable (Windows-compatible)
@@ -36,6 +36,7 @@ foreach ($pythonCommands as $cmd) {
     }
 }
 
+// If still not found, try direct execution test
 if ($pythonExecutable === null) {
     foreach ($pythonCommands as $cmd) {
         $testOutput = @shell_exec("$cmd --version 2>&1");
@@ -47,11 +48,12 @@ if ($pythonExecutable === null) {
 }
 
 if ($pythonExecutable === null) {
+    error_log("Target Stock API: Python not found. Tried commands: " . implode(', ', $pythonCommands));
     echo json_encode([
         'success' => false,
-        'error' => 'Python not found',
+        'error' => 'Python not found or not executable. Check server configuration.',
         'target_stock_levels' => []
-    ]);
+    ], JSON_PRETTY_PRINT);
     exit;
 }
 
@@ -69,6 +71,7 @@ try {
         throw new Exception('Python script path not found: ' . $pythonScript);
     }
     
+    // Execute Python script and capture JSON output
     if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
         $command = escapeshellcmd($pythonExecutable) . ' ' . escapeshellarg($scriptPath) . ' 2>NUL';
     } else {
@@ -79,58 +82,31 @@ try {
     chdir($originalDir);
     
     if ($output === null || trim($output) === '') {
-        error_log("Target Stock API - Python script returned empty output. Command: $command");
-        throw new Exception('Failed to execute Python script or no output received');
+        throw new Exception('Failed to execute Python script or no output received. Command: ' . $command);
     }
     
-    // Log first 500 chars of output for debugging
-    error_log("Target Stock API - Python output preview: " . substr($output, 0, 500));
-    
+    // Parse JSON output
     $result = json_decode($output, true);
     
     if (json_last_error() !== JSON_ERROR_NONE) {
+        // Try to extract JSON from output if there's extra text
         if (preg_match('/\{.*\}/s', $output, $matches)) {
             $result = json_decode($matches[0], true);
         }
-        
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log("Target Stock API - JSON decode error: " . json_last_error_msg() . " | Output: " . substr($output, 0, 1000));
-            throw new Exception('Invalid JSON response from Python script: ' . json_last_error_msg());
+            throw new Exception('Invalid JSON response from Python script: ' . json_last_error_msg() . '. Output preview: ' . substr($output, 0, 500));
         }
     }
     
-    // Verify we got valid data
-    if (!isset($result['success']) || !$result['success']) {
-        error_log("Target Stock API - Python script returned success=false: " . ($result['error'] ?? 'Unknown error'));
-        throw new Exception('Python script returned error: ' . ($result['error'] ?? 'Unknown error'));
-    }
-    
-    // Extract target stock levels from projected_stock data
-    // Fallback: Calculate from forecast_demand + buffer if projected_stock is empty
+    // Extract target stock levels from projected_stock
     $targetStockLevels = [];
     $projectedStock = $result['projected_stock'] ?? [];
-    $forecastDemand = $result['forecast_demand'] ?? [];
-    $targetBuffer = 10; // From config.py TARGET_BUFFER_UNITS
     
-    // First try to get from projected_stock
-    if (!empty($projectedStock)) {
-        foreach ($projectedStock as $row) {
-            $bloodType = $row['Blood_Type'] ?? '';
-            $targetStock = intval($row['Target_Stock'] ?? 0);
-            if ($bloodType) {
-                $targetStockLevels[$bloodType] = $targetStock;
-            }
-        }
-    }
-    
-    // Fallback: Calculate from forecast_demand + buffer if projected_stock didn't work
-    if (empty($targetStockLevels) && !empty($forecastDemand)) {
-        foreach ($forecastDemand as $row) {
-            $bloodType = $row['Blood_Type'] ?? '';
-            $forecastDemandValue = intval($row['Forecast_Demand'] ?? 0);
-            if ($bloodType) {
-                $targetStockLevels[$bloodType] = $forecastDemandValue + $targetBuffer;
-            }
+    foreach ($projectedStock as $row) {
+        $bloodType = $row['Blood_Type'] ?? '';
+        $targetStock = intval($row['Target_Stock'] ?? 0);
+        if ($bloodType) {
+            $targetStockLevels[$bloodType] = $targetStock;
         }
     }
     
@@ -143,25 +119,18 @@ try {
     }
     
     // Log for debugging
-    error_log("Target Stock API - projected_stock count: " . count($projectedStock));
-    error_log("Target Stock API - forecast_demand count: " . count($forecastDemand));
-    error_log("Target Stock API - extracted levels: " . json_encode($targetStockLevels));
-    
-    // Check if we actually got any non-zero target stock levels
-    $hasValidData = false;
-    foreach ($targetStockLevels as $bt => $value) {
+    $hasNonZero = false;
+    foreach ($targetStockLevels as $value) {
         if ($value > 0) {
-            $hasValidData = true;
+            $hasNonZero = true;
             break;
         }
     }
     
-    if (!$hasValidData) {
-        error_log("Target Stock API WARNING: All target stock levels are 0. This might indicate:");
-        error_log("  - Python script failed silently");
-        error_log("  - No forecast data available");
-        error_log("  - Forecast returned all zeros");
-        error_log("  - Projected stock data structure mismatch");
+    if (!$hasNonZero) {
+        error_log("Target Stock API WARNING: All target stock levels are 0. Projected stock data: " . json_encode($projectedStock));
+    } else {
+        error_log("Target Stock API: Successfully loaded target stock levels: " . json_encode($targetStockLevels));
     }
     
     echo json_encode([
@@ -170,13 +139,12 @@ try {
         'generated_at' => date('Y-m-d H:i:s'),
         'debug' => [
             'projected_stock_count' => count($projectedStock),
-            'forecast_demand_count' => count($forecastDemand),
-            'has_valid_data' => $hasValidData
+            'has_non_zero' => $hasNonZero
         ]
     ], JSON_PRETTY_PRINT);
     
 } catch (Exception $e) {
-    error_log("Target Stock API Exception: " . $e->getMessage());
+    error_log("Target Stock API Exception: " . $e->getMessage() . " | File: " . $e->getFile() . " | Line: " . $e->getLine());
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage(),

@@ -1,8 +1,8 @@
 class BloodCollectionModalAdmin {
     constructor() {
         this.modal = null;
-        this.currentStep = 1;
-        this.totalSteps = 4; // Admin: 4 steps only
+        this.currentStep = 2; // Start at step 2 (step 1 is hidden)
+        this.totalSteps = 4; // Total steps in DOM (step 1 hidden, so effectively 3 visible steps)
         this.bloodCollectionData = null;
         this.isSubmitting = false;
         this.init();
@@ -72,13 +72,20 @@ class BloodCollectionModalAdmin {
                 });
             });
 
-            // Bag card selection visual
+            // Bag card selection visual (step 1 is hidden, but keep this for compatibility)
             this.modal.querySelectorAll('.bag-option input[type="radio"]').forEach(radio => {
                 radio.addEventListener('change', () => {
                     this.modal.querySelectorAll('.bag-option').forEach(opt => opt.classList.remove('selected'));
                     if (radio.checked) radio.closest('.bag-option')?.classList.add('selected');
                 });
             });
+            
+            // Ensure blood_bag_type is always set to "Single"
+            const form = document.getElementById('bloodCollectionFormAdmin');
+            const bagTypeInput = form?.querySelector('input[name="blood_bag_type"]');
+            if (bagTypeInput) {
+                bagTypeInput.value = 'Single';
+            }
         }
 
         // Monitor time inputs to prevent them from being disabled
@@ -222,12 +229,50 @@ class BloodCollectionModalAdmin {
         if (serialInput) serialInput.value = serialNumber;
     }
 
+    showLoadingSpinner() {
+        const overlay = document.getElementById('bloodCollectionLoadingOverlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            overlay.classList.remove('hidden');
+        }
+    }
+
+    hideLoadingSpinner() {
+        const overlay = document.getElementById('bloodCollectionLoadingOverlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+            overlay.classList.add('hidden');
+        }
+    }
+
     async openModal(collectionData) {
         this.bloodCollectionData = collectionData || {};
-        this.currentStep = 1;
+        this.currentStep = 2; // Start at step 2 (step 1 is hidden)
         this.isSubmitting = false;
         
-        // If physical_exam_id is missing or empty, try to resolve it
+        // Show modal immediately
+        if (this.modal) {
+            try {
+                const bsModal = bootstrap.Modal.getOrCreateInstance(this.modal);
+                if (bsModal) {
+                    bsModal.show();
+                } else {
+                    // Fallback to custom show
+                    this.modal.style.display = 'flex';
+                    setTimeout(() => { this.modal.classList.add('show'); }, 10);
+                }
+            } catch (e) {
+                // Fallback to custom show
+                this.modal.style.display = 'flex';
+                setTimeout(() => { this.modal.classList.add('show'); }, 10);
+            }
+        }
+        
+        // Show loading spinner
+        this.showLoadingSpinner();
+        
+        try {
+            // If physical_exam_id is missing or empty, try to resolve it
         const hasPhysicalExamId = this.bloodCollectionData.physical_exam_id && 
                                   String(this.bloodCollectionData.physical_exam_id).trim() !== '';
         
@@ -270,30 +315,42 @@ class BloodCollectionModalAdmin {
         // Generate new serial number
         this.generateUnitSerialNumber();
         
-        // Populate summary data (blood type, weight, etc.)
-        await this.populateSummary();
+        // Set collection date in both step 2 and step 3
+        const today = new Date();
+        const dateString = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         
-        if (this.modal) {
-            // Use Bootstrap Modal API if available, otherwise use custom show
-            try {
-                const bsModal = bootstrap.Modal.getOrCreateInstance(this.modal);
-                if (bsModal) {
-                    bsModal.show();
-                } else {
-                    // Fallback to custom show
-                    this.modal.style.display = 'flex';
-                    setTimeout(() => { this.modal.classList.add('show'); }, 10);
-                }
-            } catch (e) {
-                // Fallback to custom show
-                this.modal.style.display = 'flex';
-                setTimeout(() => { this.modal.classList.add('show'); }, 10);
-            }
+        const dateEl = document.getElementById('blood-collection-date-admin');
+        if (dateEl) {
+            dateEl.value = dateString;
+            console.log('[Admin] Set collection date in step 2:', dateString);
         }
-        this.showStep(1);
-        this.updateProgressIndicator();
-        this.updateNavigationButtons();
-        console.log('[Admin] BloodCollectionModal opened', this.bloodCollectionData);
+        
+        const dateElStep3 = document.getElementById('blood-collection-date-step3-admin');
+        if (dateElStep3) {
+            dateElStep3.value = dateString;
+            console.log('[Admin] Set collection date in step 3:', dateString);
+        }
+        
+            // Populate summary data (blood type, weight, etc.)
+            await this.populateSummary();
+            
+            // Set blood_bag_type to "Single" automatically
+            const form = document.getElementById('bloodCollectionFormAdmin');
+            const bagTypeInput = form?.querySelector('input[name="blood_bag_type"]');
+            if (bagTypeInput) {
+                bagTypeInput.value = 'Single';
+            }
+            
+            // Initialize step display
+            this.showStep(2); // Start at step 2
+            this.updateProgressIndicator();
+            this.updateNavigationButtons();
+            
+            console.log('[Admin] BloodCollectionModal opened', this.bloodCollectionData);
+        } finally {
+            // Hide loading spinner after all data is loaded
+            this.hideLoadingSpinner();
+        }
     }
 
     async populateSummary() {
@@ -380,8 +437,38 @@ class BloodCollectionModalAdmin {
         
         // Special handling for Step 3 (Timing) - ensure time inputs are always editable
         if (stepNumber === 3) {
+            // Set collection date in step 3 - get from step 2 or generate new
+            const setDateInStep3 = () => {
+                const dateElStep2 = document.getElementById('blood-collection-date-admin');
+                const dateElStep3 = document.getElementById('blood-collection-date-step3-admin');
+                if (dateElStep3) {
+                    // Try to get date from step 2 first
+                    if (dateElStep2 && dateElStep2.value) {
+                        dateElStep3.value = dateElStep2.value;
+                    } else {
+                        // Generate new date if step 2 date is not available
+                        const today = new Date();
+                        const dateString = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                        dateElStep3.value = dateString;
+                        // Also set it in step 2 if it exists
+                        if (dateElStep2) {
+                            dateElStep2.value = dateString;
+                        }
+                    }
+                    // Ensure the field is visible
+                    dateElStep3.style.display = 'block';
+                    dateElStep3.style.visibility = 'visible';
+                    console.log('[Admin] Set collection date in step 3:', dateElStep3.value);
+                }
+            };
+            
+            // Set date immediately
+            setDateInStep3();
+            
             // Force enable after a short delay to ensure DOM is ready
             setTimeout(() => {
+                // Set date again in case DOM wasn't ready
+                setDateInStep3();
                 const startTime = document.getElementById('blood-start-time-admin');
                 const endTime = document.getElementById('blood-end-time-admin');
                 
@@ -446,12 +533,20 @@ class BloodCollectionModalAdmin {
 
     updateProgressIndicator() {
         if (!this.modal) return;
-        this.modal.querySelectorAll('.blood-step').forEach((step, index) => {
-            const stepNumber = index + 1;
-            if (stepNumber < this.currentStep) {
+        // Only update visible steps (step 2, 3, 4 - step 1 is hidden)
+        this.modal.querySelectorAll('.blood-step').forEach((step) => {
+            const stepNumber = parseInt(step.dataset.step);
+            // Skip step 1 (hidden)
+            if (stepNumber === 1) return;
+            
+            // Map step numbers: 2->1, 3->2, 4->3 for display
+            const displayStep = stepNumber - 1;
+            const currentDisplayStep = this.currentStep - 1;
+            
+            if (displayStep < currentDisplayStep) {
                 step.classList.add('completed');
                 step.classList.remove('active');
-            } else if (stepNumber === this.currentStep) {
+            } else if (displayStep === currentDisplayStep) {
                 step.classList.add('active');
                 step.classList.remove('completed');
             } else {
@@ -460,7 +555,10 @@ class BloodCollectionModalAdmin {
         });
         const progressFill = this.modal.querySelector('.blood-progress-fill');
         if (progressFill) {
-            const percentage = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100;
+            // Calculate progress based on visible steps (3 steps: 2, 3, 4)
+            const visibleSteps = 3;
+            const currentVisibleStep = this.currentStep - 1; // Map to visible step (2->1, 3->2, 4->3)
+            const percentage = ((currentVisibleStep - 1) / (visibleSteps - 1)) * 100;
             progressFill.style.width = percentage + '%';
         }
     }
@@ -470,7 +568,7 @@ class BloodCollectionModalAdmin {
         const prevBtn = this.modal.querySelector('.blood-prev-btn-admin');
         const nextBtn = this.modal.querySelector('.blood-next-btn-admin');
         const submitBtn = this.modal.querySelector('.blood-submit-btn-admin');
-        if (prevBtn) prevBtn.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
+        if (prevBtn) prevBtn.style.display = this.currentStep > 2 ? 'inline-block' : 'none'; // Step 2 is the first visible step
         if (nextBtn) nextBtn.style.display = this.currentStep < this.totalSteps ? 'inline-block' : 'none';
         if (submitBtn) submitBtn.style.display = this.currentStep === this.totalSteps ? 'inline-block' : 'none';
         if (this.currentStep === this.totalSteps) this.updateSummary();
@@ -489,11 +587,18 @@ class BloodCollectionModalAdmin {
             if (this.currentStep === 4) {
                 this.updateSummary();
             }
+            
+            // Ensure blood_bag_type is set to "Single" when moving to any step
+            const form = document.getElementById('bloodCollectionFormAdmin');
+            const bagTypeInput = form?.querySelector('input[name="blood_bag_type"]');
+            if (bagTypeInput) {
+                bagTypeInput.value = 'Single';
+            }
         }
     }
 
     previousStep() {
-        if (this.currentStep > 1) {
+        if (this.currentStep > 2) { // Step 2 is the first visible step
             this.currentStep--;
             this.updateProgressIndicator();
             this.showStep(this.currentStep);
@@ -502,20 +607,25 @@ class BloodCollectionModalAdmin {
     }
 
     goToStep(step) {
-        if (step >= 1 && step <= this.currentStep && step <= this.totalSteps) {
-            this.currentStep = step;
+        // Map visible step clicks: step 1 in UI = step 2 in DOM, step 2 in UI = step 3 in DOM, step 3 in UI = step 4 in DOM
+        const actualStep = step === 1 ? 2 : step === 2 ? 3 : step === 3 ? 4 : step;
+        if (actualStep >= 2 && actualStep <= this.currentStep && actualStep <= this.totalSteps) {
+            this.currentStep = actualStep;
             this.updateProgressIndicator();
-            this.showStep(step);
+            this.showStep(actualStep);
             this.updateNavigationButtons();
             
             // Update summary if we're at the review step
-            if (step === 4) {
+            if (actualStep === 4) {
                 this.updateSummary();
             }
         }
     }
 
     validateCurrentStep() {
+        // Skip validation for step 1 (hidden)
+        if (this.currentStep === 1) return true;
+        
         const currentStepElement = document.getElementById(`blood-step-${this.currentStep}-admin`);
         if (!currentStepElement) return false;
         const requiredFields = currentStepElement.querySelectorAll('[required]');
@@ -548,12 +658,12 @@ class BloodCollectionModalAdmin {
         // Admin: force success (no status step) - match staff format
         data.is_successful = 'YES'; // Use string format like staff version
         
-        // Set default blood bag values if not present (matching staff behavior)
+        // Automatically set blood_bag_type to "Single" (step 1 is removed)
+        data.blood_bag_type = 'Single';
+        
+        // Set default blood bag brand if not present
         if (!data.blood_bag_brand) {
             data.blood_bag_brand = 'KARMI';
-        }
-        if (!data.blood_bag_type) {
-            data.blood_bag_type = 'S-KARMI';
         }
         
         // Get physical_exam_id from form data first, then fallback to bloodCollectionData
@@ -595,7 +705,22 @@ class BloodCollectionModalAdmin {
             }
         }
         
+        // Get collection date from step 2 or step 3
+        let collectionDate = '-';
+        const dateElStep2 = document.getElementById('blood-collection-date-admin');
+        const dateElStep3 = document.getElementById('blood-collection-date-step3-admin');
+        if (dateElStep2 && dateElStep2.value) {
+            collectionDate = dateElStep2.value;
+        } else if (dateElStep3 && dateElStep3.value) {
+            collectionDate = dateElStep3.value;
+        } else {
+            // Fallback to current date if not set
+            const today = new Date();
+            collectionDate = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        }
+        
         const map = {
+            'summary-collection-date-admin': collectionDate,
             'summary-blood-bag-admin': d.blood_bag_type || '-',
             'summary-serial-number-admin': d.unit_serial_number || '-',
             'summary-start-time-admin': d.start_time || '-',
@@ -693,7 +818,12 @@ class BloodCollectionModalAdmin {
             if (res && res.success) {
                 this.showToast('Blood collection submitted successfully!', 'success');
                 this.closeModal();
-                setTimeout(() => { window.location.reload(); }, 1500);
+                // Reload page with cache-busting to ensure status updates are visible
+                setTimeout(() => { 
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('_t', Date.now());
+                    window.location.href = url.toString();
+                }, 1500);
             } else {
                 this.showToast(res?.message || 'Submission failed', 'error');
             }
@@ -736,10 +866,17 @@ class BloodCollectionModalAdmin {
             }
         }
         const form = document.getElementById('bloodCollectionFormAdmin');
-        if (form) form.reset();
-        this.currentStep = 1;
+        if (form) {
+            form.reset();
+            // Ensure blood_bag_type is set to "Single" after reset
+            const bagTypeInput = form.querySelector('input[name="blood_bag_type"]');
+            if (bagTypeInput) {
+                bagTypeInput.value = 'Single';
+            }
+        }
+        this.currentStep = 2; // Reset to step 2 (step 1 is hidden)
         this.updateProgressIndicator();
-        this.showStep(1);
+        this.showStep(2);
         this.updateNavigationButtons();
     }
     

@@ -10,7 +10,7 @@
 <div class="modal fade" id="processMedicalHistoryConfirmModal" tabindex="-1" aria-labelledby="processMedicalHistoryConfirmLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="processMedicalHistoryConfirmLabel">
                     <i class="fas fa-file-medical me-2"></i>
                     Process Medical History
@@ -69,7 +69,7 @@
 <div class="modal fade" id="screeningSubmittedSuccessModal" tabindex="-1" aria-labelledby="screeningSubmittedSuccessLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px; border: none;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white; border-radius: 15px 15px 0 0;">
+            <div class="modal-header" style="background: #941022; color: white; border-radius: 15px 15px 0 0;">
                 <h5 class="modal-title" id="screeningSubmittedSuccessLabel">
                     <i class="fas fa-check-circle me-2"></i>
                     Screening Submitted Successfully
@@ -120,7 +120,7 @@
             </div>
             
             <div class="modal-content-with-nav" id="declarationFormModalContentWrapper">
-                <div class="modal-header" style="background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); color: white;">
+                <div class="modal-header" style="background: #941022; color: white;">
                     <h5 class="modal-title" id="declarationFormModalLabel">
                         <i class="fas fa-file-alt me-2"></i>
                         Declaration Form
