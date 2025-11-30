@@ -134,8 +134,8 @@ function buildLowInventoryPushPayload($bloodType, $unitsRemaining)
     $unitLabel = $safeUnits === 1 ? 'unit' : 'units';
 
     return [
-        'title' => "{$typeLabel} donors urgently needed",
-        'body' => "Our {$typeLabel} reserve is down to {$safeUnits} {$unitLabel} at the Iloilo City blood bank. Please schedule a donation as soon as you can.",
+        'title' => "🩸 {$typeLabel} Blood Critical Alert",
+        'body' => "Our {$typeLabel} blood inventory has reached a critical level ({$safeUnits} {$unitLabel} remaining) at the Iloilo City blood bank. Your donation is urgently needed.",
         'icon' => '/assets/image/PRC_Logo.png',
         'badge' => '/assets/image/PRC_Logo.png',
         'data' => [
@@ -158,6 +158,96 @@ function incrementSkipReason(&$results, $reasonKey)
         $results['push']['skip_reasons'][$reasonKey] = 0;
     }
     $results['push']['skip_reasons'][$reasonKey]++;
+}
+
+/**
+ * Get target stock levels for each blood type from the forecast API
+ * Returns array with blood type as key and target stock as value
+ * Falls back to default threshold if API fails
+ */
+function getTargetStockLevels($fallbackThreshold = 10) {
+    $targetStockLevels = [];
+    $allBloodTypes = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+    
+    // Initialize all blood types with fallback threshold
+    foreach ($allBloodTypes as $bt) {
+        $targetStockLevels[$bt] = $fallbackThreshold;
+    }
+    
+    try {
+        // Construct API URL - try multiple methods for reliability
+        $apiUrl = null;
+        
+        // Method 1: Try to construct from current script location (most reliable)
+        if (isset($_SERVER['HTTP_HOST']) && isset($_SERVER['SCRIPT_NAME'])) {
+            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'];
+            $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
+            // Script is in /public/api/, and target API is also in /public/api/
+            $apiUrl = $protocol . '://' . $host . $scriptDir . '/get-target-stock-levels.php';
+        }
+        
+        // Method 2: Try localhost with common XAMPP path
+        if (!$apiUrl || !@file_get_contents($apiUrl, false, stream_context_create(['http' => ['timeout' => 2]]))) {
+            $projectRoot = realpath(__DIR__ . '/../../');
+            if (strpos($projectRoot, 'Xampp') !== false || strpos($projectRoot, 'xampp') !== false) {
+                $apiUrl = 'http://localhost/RED-CROSS-THESIS/public/api/get-target-stock-levels.php';
+            } else {
+                // Method 3: Try relative file path (if running via CLI or same server)
+                $apiFile = __DIR__ . '/get-target-stock-levels.php';
+                if (file_exists($apiFile)) {
+                    // For CLI or same-server execution, we can include the file directly
+                    // But for HTTP requests, we still need a URL
+                    if (php_sapi_name() === 'cli') {
+                        // CLI mode - execute the API logic directly
+                        ob_start();
+                        include $apiFile;
+                        $response = ob_get_clean();
+                    } else {
+                        // HTTP mode - use localhost fallback
+                        $apiUrl = 'http://localhost' . str_replace($_SERVER['DOCUMENT_ROOT'], '', $apiFile);
+                    }
+                }
+            }
+        }
+        
+        // If we have a URL, fetch it via HTTP
+        if ($apiUrl && !isset($response)) {
+            $context = stream_context_create([
+                'http' => [
+                    'method' => 'GET',
+                    'timeout' => 10,
+                    'ignore_errors' => true
+                ]
+            ]);
+            
+            $response = @file_get_contents($apiUrl, false, $context);
+        }
+        
+        if ($response !== false) {
+            $data = json_decode($response, true);
+            
+            if (isset($data['success']) && $data['success'] && isset($data['target_stock_levels'])) {
+                // Merge fetched target stock levels with defaults
+                foreach ($data['target_stock_levels'] as $bloodType => $targetStock) {
+                    $targetStock = intval($targetStock);
+                    // Only use if target stock is greater than 0 (valid target)
+                    if ($targetStock > 0) {
+                        $targetStockLevels[$bloodType] = $targetStock;
+                    }
+                }
+                error_log("Auto-notify: Loaded target stock levels: " . json_encode($targetStockLevels));
+            } else {
+                error_log("Auto-notify: Target stock API returned invalid data, using fallback threshold");
+            }
+        } else {
+            error_log("Auto-notify: Failed to fetch target stock levels from API, using fallback threshold");
+        }
+    } catch (Exception $e) {
+        error_log("Auto-notify: Exception fetching target stock levels: " . $e->getMessage());
+    }
+    
+    return $targetStockLevels;
 }
 
 /**
@@ -269,13 +359,13 @@ try {
     // Get JSON input (optional - can be called without parameters)
     $input = json_decode(file_get_contents('php://input'), true);
     
-    $defaultThreshold = 10; // Trigger when a blood type drops to 10 units or below
+    $defaultThreshold = 10; // Fallback threshold if target stock levels are unavailable
     $defaultRateLimit = 14; // Notify donors every 14 days (two weeks)
     
-    // Configuration: Threshold for low inventory (defaults to 10 units)
-    $threshold = isset($input['threshold']) ? intval($input['threshold']) : $defaultThreshold;
-    if ($threshold < 1) {
-        $threshold = $defaultThreshold;
+    // Configuration: Fallback threshold (used only if target stock levels are unavailable)
+    $fallbackThreshold = isset($input['threshold']) ? intval($input['threshold']) : $defaultThreshold;
+    if ($fallbackThreshold < 1) {
+        $fallbackThreshold = $defaultThreshold;
     }
     
     // Configuration: Rate limit in days (defaults to 14 days, configurable up to 45 days)
@@ -284,16 +374,27 @@ try {
         $rate_limit_days = $defaultRateLimit;
     }
     
-    // Step 1: Get current blood inventory by type
+    // Step 1: Get target stock levels for each blood type (from forecast API)
+    $targetStockLevels = getTargetStockLevels($fallbackThreshold);
+    
+    // Step 2: Get current blood inventory by type
     $inventory = getBloodInventoryByType();
     
-    // Step 2: Find blood types that are at or below threshold
+    // Step 3: Find blood types that are below their target stock levels
     $low_inventory_types = [];
     $low_inventory_counts = [];
+    $thresholds_used = [];
+    
     foreach ($inventory as $blood_type => $count) {
-        if ($count <= $threshold) {
+        // Get the target stock level for this specific blood type
+        $targetStock = isset($targetStockLevels[$blood_type]) ? intval($targetStockLevels[$blood_type]) : $fallbackThreshold;
+        
+        // Only check if target stock is greater than 0 (valid target)
+        // If target is 0, skip this blood type (no target defined)
+        if ($targetStock > 0 && $count < $targetStock) {
             $low_inventory_types[] = $blood_type;
             $low_inventory_counts[$blood_type] = $count;
+            $thresholds_used[$blood_type] = $targetStock;
         }
     }
     
@@ -302,8 +403,9 @@ try {
         ob_clean();
         $responsePayload = [
             'success' => true,
-            'message' => 'No low inventory detected. All blood types are above threshold.',
-            'threshold' => $threshold,
+            'message' => 'No low inventory detected. All blood types are above their target stock levels.',
+            'target_stock_levels' => $targetStockLevels,
+            'fallback_threshold' => $fallbackThreshold,
             'inventory' => $inventory,
             'notifications_sent' => 0,
             'rate_limit_days' => $rate_limit_days
@@ -314,7 +416,7 @@ try {
         exit();
     }
     
-    // Step 3: Get ALL push subscriptions (simplified approach)
+    // Step 4: Get ALL push subscriptions (simplified approach)
     // Query push_subscriptions table directly - this is the source of truth
     // We'll notify ONLY donors with push subscriptions
     $subscriptions = [];
@@ -391,7 +493,9 @@ try {
         echo json_encode([
             'success' => true,
             'message' => 'No push subscriptions found. No notifications sent.',
-            'threshold' => $threshold,
+            'target_stock_levels' => $targetStockLevels,
+            'thresholds_used' => $thresholds_used,
+            'fallback_threshold' => $fallbackThreshold,
             'low_inventory_types' => $low_inventory_types,
             'low_inventory_counts' => $low_inventory_counts,
             'inventory' => $inventory,
@@ -406,7 +510,7 @@ try {
     // Get unique donor IDs from subscriptions
     $donors_with_push = array_unique(array_column($subscriptions, 'donor_id'));
     
-    // Step 4: Batch check rate limiting (optimized - check all at once instead of per donor)
+    // Step 5: Batch check rate limiting (optimized - check all at once instead of per donor)
     // Get all recent notifications for these donors in batches to avoid URL length issues
     $cutoff_date = date('Y-m-d\TH:i:s\Z', strtotime("-$rate_limit_days days"));
     $recently_notified_map = [];
@@ -461,8 +565,10 @@ try {
         usleep(10000); // 0.01 second delay
     }
     
-    // Get donor details for donors with push subscriptions (blood-type targeting handled later)
+    // Get donor details AND eligibility status for donors with push subscriptions
+    // CRITICAL: Only notify eligible/approved donors with matching blood types
     $donor_details = [];
+    $donor_eligibility = []; // Track eligibility status for each donor
     $donors_to_notify = $donors_with_push;
     
     if (!empty($donors_to_notify)) {
@@ -531,12 +637,82 @@ try {
                 }
             }
             
+            // CRITICAL: Check eligibility status for all donors in batch
+            // Only approved/eligible donors should receive notifications
+            $eligibility_check_param = implode(',', $batch);
+            $eligibility_status_query = "eligibility?select=donor_id,status&donor_id=in.($eligibility_check_param)&order=created_at.desc";
+            $eligibility_status_response = supabaseRequest($eligibility_status_query);
+            
+            if (isset($eligibility_status_response['data']) && is_array($eligibility_status_response['data'])) {
+                // Group by donor_id and get the latest status
+                $eligibilityByDonor = [];
+                foreach ($eligibility_status_response['data'] as $elig) {
+                    $eDonorId = $elig['donor_id'] ?? null;
+                    if ($eDonorId && !isset($eligibilityByDonor[$eDonorId])) {
+                        $eligibilityByDonor[$eDonorId] = strtolower(trim($elig['status'] ?? ''));
+                    }
+                }
+                
+                // Check screening forms for disapproval
+                $screening_query = "screening_form?select=donor_form_id,disapproval_reason&donor_form_id=in.($eligibility_check_param)";
+                $screening_response = supabaseRequest($screening_query);
+                $declinedDonors = [];
+                if (isset($screening_response['data']) && is_array($screening_response['data'])) {
+                    foreach ($screening_response['data'] as $screen) {
+                        $screenDonorId = $screen['donor_form_id'] ?? null;
+                        if ($screenDonorId && !empty($screen['disapproval_reason'])) {
+                            $declinedDonors[$screenDonorId] = true;
+                        }
+                    }
+                }
+                
+                // Check physical exam for deferral/decline
+                $physical_query = "physical_examination?select=donor_id,remarks&donor_id=in.($eligibility_check_param)&order=created_at.desc";
+                $physical_response = supabaseRequest($physical_query);
+                $deferredDonors = [];
+                if (isset($physical_response['data']) && is_array($physical_response['data'])) {
+                    $deferralStatuses = ['temporarily deferred', 'permanently deferred', 'declined', 'refused'];
+                    foreach ($physical_response['data'] as $physical) {
+                        $pDonorId = $physical['donor_id'] ?? null;
+                        $remarks = strtolower(trim($physical['remarks'] ?? ''));
+                        if ($pDonorId && in_array($remarks, $deferralStatuses, true)) {
+                            $deferredDonors[$pDonorId] = true;
+                        }
+                    }
+                }
+                
+                // Store eligibility status for each donor
+                foreach ($batch as $donorId) {
+                    $eligStatus = $eligibilityByDonor[$donorId] ?? '';
+                    $isApproved = ($eligStatus === 'approved' || $eligStatus === 'eligible');
+                    $isDeclined = isset($declinedDonors[$donorId]);
+                    $isDeferred = isset($deferredDonors[$donorId]);
+                    
+                    $donor_eligibility[$donorId] = [
+                        'is_eligible' => $isApproved && !$isDeclined && !$isDeferred,
+                        'status' => $eligStatus,
+                        'is_declined' => $isDeclined,
+                        'is_deferred' => $isDeferred
+                    ];
+                }
+            } else {
+                // If no eligibility records found, mark as not eligible (new donors need to complete process first)
+                foreach ($batch as $donorId) {
+                    $donor_eligibility[$donorId] = [
+                        'is_eligible' => false,
+                        'status' => 'new',
+                        'is_declined' => false,
+                        'is_deferred' => false
+                    ];
+                }
+            }
+            
             // Small delay between batches
             usleep(25000); // 0.025 second delay
         }
     }
     
-    // Step 5: Send notifications (with rate limiting check)
+    // Step 6: Send notifications (with rate limiting check)
     $pushSender = new WebPushSender();
     
     $results = [
@@ -587,6 +763,7 @@ try {
             continue;
         }
         
+        // CRITICAL: Only notify if this donor's blood type is actually low
         if (!isset($low_inventory_counts[$donorBloodType])) {
             $results['push']['skipped']++;
             incrementSkipReason($results, 'blood_type_not_low');
@@ -594,6 +771,20 @@ try {
             continue;
         }
         
+        // CRITICAL: Check if donor is eligible to donate (approved/eligible status, not declined/deferred)
+        $eligibility = $donor_eligibility[$donor_id] ?? null;
+        if (!$eligibility || !$eligibility['is_eligible']) {
+            $results['push']['skipped']++;
+            $reason = $eligibility ? ($eligibility['is_declined'] ? 'donor_declined' : ($eligibility['is_deferred'] ? 'donor_deferred' : 'donor_not_eligible')) : 'eligibility_unknown';
+            incrementSkipReason($results, $reason);
+            queueNotificationLog($donor_id, 'skipped', $reason, $donorBloodType, $subscription['endpoint'] ?? null);
+            continue;
+        }
+        
+        // Only send notification if:
+        // 1. Donor has matching blood type that's low ✓
+        // 2. Donor is eligible to donate ✓
+        // 3. Not rate limited (checked below) ✓
         $targetBloodType = $donorBloodType;
         $unitsRemaining = $low_inventory_counts[$targetBloodType];
         $push_payload = buildLowInventoryPushPayload($targetBloodType, $unitsRemaining);
@@ -684,7 +875,7 @@ try {
         }
     }
     
-    // Step 6: Email notifications removed - ONLY send to push_subscriptions
+    // Step 7: Email notifications removed - ONLY send to push_subscriptions
     // The system now ONLY notifies donors in push_subscriptions table
     // No email fallback to prevent sending to wrong donors
     
@@ -696,7 +887,9 @@ try {
     echo json_encode([
         'success' => true,
         'message' => 'Low inventory notifications processed',
-        'threshold' => $threshold,
+        'target_stock_levels' => $targetStockLevels,
+        'thresholds_used' => $thresholds_used,
+        'fallback_threshold' => $fallbackThreshold,
         'rate_limit_days' => $rate_limit_days,
         'inventory' => $inventory,
         'low_inventory_types' => $low_inventory_types,
