@@ -82,11 +82,21 @@ def _build_traces(series_dict: Dict[str, pd.DataFrame], actual_label: str, forec
             )
         )
 
-        # Forecast trace
+        # Forecast trace - connect to last actual point
+        if not forecast_df.empty and not actual_df.empty:
+            last_actual_month = actual_df["month"].iloc[-1]
+            last_actual_value = actual_df["value"].iloc[-1]
+            # Prepend last actual point to forecast for connection
+            forecast_x = [last_actual_month] + forecast_df["month"].tolist()
+            forecast_y = [last_actual_value] + forecast_df["forecast"].tolist()
+        else:
+            forecast_x = forecast_df["month"] if not forecast_df.empty else []
+            forecast_y = forecast_df["forecast"] if not forecast_df.empty else []
+        
         traces.append(
             go.Scatter(
-                x=forecast_df["month"],
-                y=forecast_df["forecast"] if not forecast_df.empty else [],
+                x=forecast_x,
+                y=forecast_y,
                 mode="lines+markers",
                 name=f"{blood_type} - {forecast_label}",
                 line=dict(color=forecast_color, width=2.5, dash="dash"),
@@ -132,13 +142,13 @@ def _build_combined_traces(supply_series: Dict[str, pd.DataFrame], demand_series
                     y=supply_actual["value"],
                     mode="lines+markers",
                     name=f"{blood_type} - Supply Actual",
-                    line=dict(color="#2ecc71", width=2.5),
+                    line=dict(color="#7dcea0", width=2.5),
                     marker=dict(size=7),
                     visible=(idx == 0),
                 ),
                 go.Scatter(
-                    x=supply_fc["month"],
-                    y=supply_fc["forecast"],
+                    x=([supply_actual["month"].iloc[-1]] + supply_fc["month"].tolist()) if not supply_fc.empty and not supply_actual.empty else (supply_fc["month"] if not supply_fc.empty else []),
+                    y=([supply_actual["value"].iloc[-1]] + supply_fc["forecast"].tolist()) if not supply_fc.empty and not supply_actual.empty else (supply_fc["forecast"] if not supply_fc.empty else []),
                     mode="lines+markers",
                     name=f"{blood_type} - Supply Forecast",
                     line=dict(color="#27ae60", width=2.5, dash="dash"),
@@ -155,8 +165,8 @@ def _build_combined_traces(supply_series: Dict[str, pd.DataFrame], demand_series
                     visible=(idx == 0),
                 ),
                 go.Scatter(
-                    x=demand_fc["month"],
-                    y=demand_fc["forecast"],
+                    x=([demand_actual["month"].iloc[-1]] + demand_fc["month"].tolist()) if not demand_fc.empty and not demand_actual.empty else (demand_fc["month"] if not demand_fc.empty else []),
+                    y=([demand_actual["value"].iloc[-1]] + demand_fc["forecast"].tolist()) if not demand_fc.empty and not demand_actual.empty else (demand_fc["forecast"] if not demand_fc.empty else []),
                     mode="lines+markers",
                     name=f"{blood_type} - Demand Forecast",
                     line=dict(color="#c0392b", width=2.5, dash="dash"),
@@ -229,7 +239,7 @@ def generate_interactive_plots(workflow_results: Optional[Dict] = None):
         supply_series,
         actual_label="Actual Supply",
         forecast_label="Forecast Supply",
-        actual_color="#2ecc71",
+        actual_color="#7dcea0",
         forecast_color="#27ae60",
     )
     demand_traces, demand_buttons = _build_traces(
