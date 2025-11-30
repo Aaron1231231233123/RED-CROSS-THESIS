@@ -221,7 +221,11 @@
         
         <div class="mb-3">
             <label for="mobile" class="form-label">Mobile Number <span class="text-danger">*</span></label>
-            <input type="tel" class="form-control" id="mobile" name="mobile" required>
+            <div class="phone-input" style="display:flex; align-items:stretch; max-width:420px; height:44px; border:1px solid #ced4da; border-radius:0.375rem; overflow:hidden;">
+                <span class="phone-prefix" style="display:flex; align-items:center; padding:0 12px; background:#f8f9fa; font-weight:600; color:#495057; border-right:1px solid #ced4da; height:100%;">+63</span>
+                <input type="tel" class="form-control" id="mobile" name="mobile" placeholder="9123456789" inputmode="numeric" pattern="9[0-9]{9}" title="Enter 10 digits starting with 9 (e.g., 9123456789)" maxlength="10" required style="height:100%; border:0; outline:none; border-radius:0; padding:0 12px; flex:1 1 auto;" oninput="sanitizePhMobile(this)">
+            </div>
+            <small class="form-text text-muted">Enter 10 digits starting with 9 (e.g., 9123456789)</small>
         </div>
         
         <div class="mb-3">

@@ -499,7 +499,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div>
                     <label class="donor_form_label">Mobile No.</label>
-                    <input type="text" class="donor_form_input" name="mobile" value="<?php echo $editMode && $donorData ? htmlspecialchars($donorData['mobile'] ?? '') : ''; ?>">
+                    <div class="phone-input" style="display:flex; align-items:stretch; border:1px solid #ddd; border-radius:4px; overflow:hidden;">
+                        <span class="phone-prefix" style="display:flex; align-items:center; padding:0 12px; background:#f5f5f5; font-weight:600; color:#333; border-right:1px solid #ddd; height:100%;">+63</span>
+                        <?php 
+                        $mobileValue = '';
+                        if ($editMode && $donorData && !empty($donorData['mobile'])) {
+                            // If editing, remove leading 0 if present to show 10-digit format
+                            $mobileValue = preg_replace('/^0/', '', $donorData['mobile']);
+                            $mobileValue = preg_replace('/[^0-9]/', '', $mobileValue);
+                        }
+                        ?>
+                        <input type="tel" class="donor_form_input" name="mobile" id="mobile" placeholder="9123456789" inputmode="numeric" pattern="9[0-9]{9}" title="Enter 10 digits starting with 9 (e.g., 9123456789)" maxlength="10" value="<?php echo htmlspecialchars($mobileValue); ?>" style="height:100%; border:0; outline:none; border-radius:0; padding:0 12px; flex:1 1 auto;" oninput="sanitizePhMobile(this)">
+                    </div>
+                    <small style="font-size:0.875rem; color:#666; margin-top:4px; display:block;">Enter 10 digits starting with 9 (e.g., 9123456789)</small>
                 </div>
                 <div>
                     <label class="donor_form_label">Email Address</label>
@@ -611,6 +623,20 @@ document.addEventListener("DOMContentLoaded", function () {
     // Show confirmation modal when form is about to be submitted
     donorForm.addEventListener("submit", function (event) {
         event.preventDefault(); // Stop immediate submission
+        
+        // Normalize mobile to 11 digits starting with 0 before submitting
+        const mobileInput = document.getElementById('mobile');
+        if (mobileInput) {
+            const raw = (mobileInput.value || '').replace(/[^0-9]/g, '');
+            if (/^9\d{9}$/.test(raw)) {
+                // Convert 10-digit format (9xxxxxxxxx) to 11-digit format (09xxxxxxxxx)
+                mobileInput.value = '0' + raw;
+            } else if (/^0\d{10}$/.test(raw)) {
+                // Already in 11-digit format
+                mobileInput.value = raw;
+            }
+        }
+        
         openModal(); // Show modal
     });
 
@@ -626,6 +652,50 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // If "No" is clicked, just close the modal
     cancelButton.addEventListener("click", closeModal);
+    
+    // Philippine Mobile Number Validation
+    function sanitizePhMobile(inputEl) {
+        if (!inputEl) return;
+        
+        // Keep digits only
+        let digits = (inputEl.value || '').replace(/[^0-9]/g, '');
+        
+        // Enforce first digit must be 9 (equivalent to 09 when using +63 prefix)
+        if (digits.length > 0 && digits.charAt(0) !== '9') {
+            // If user typed 0 first, drop it so the sequence begins with 9 as required for PH mobiles
+            digits = digits.replace(/^0+/, '');
+        }
+        
+        // Limit to 10 digits
+        if (digits.length > 10) {
+            digits = digits.slice(0, 10);
+        }
+        
+        inputEl.value = digits;
+
+        // Realtime validity styling
+        if (digits.length === 10 && digits.charAt(0) === '9') {
+            inputEl.setCustomValidity('');
+            inputEl.style.borderColor = '';
+            inputEl.style.backgroundColor = '';
+        } else {
+            inputEl.setCustomValidity('Enter 10 digits starting with 9');
+            inputEl.style.borderColor = '#dc3545';
+            inputEl.style.backgroundColor = 'rgba(220, 53, 69, 0.05)';
+        }
+    }
+    
+    // Initialize mobile validation
+    const mobileInput = document.getElementById('mobile');
+    if (mobileInput) {
+        mobileInput.addEventListener('input', function() {
+            sanitizePhMobile(this);
+        });
+        mobileInput.addEventListener('blur', function() {
+            sanitizePhMobile(this);
+        });
+    }
+    
     // Add form validation before showing modal
     document.getElementById("triggerModalButton").addEventListener("click", function(event) {
             event.preventDefault();
@@ -644,10 +714,25 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             });
             
+            // Validate mobile number if provided
+            const mobileInput = document.getElementById('mobile');
+            if (mobileInput && mobileInput.value.trim()) {
+                const mobileValue = mobileInput.value.replace(/[^0-9]/g, '');
+                if (!/^9\d{9}$/.test(mobileValue)) {
+                    isValid = false;
+                    mobileInput.style.borderColor = "#d9534f";
+                    alert("Please enter a valid Philippine mobile number (10 digits starting with 9, e.g., 9123456789).");
+                } else {
+                    mobileInput.style.borderColor = "";
+                }
+            }
+            
             if (isValid) {
                 openModal();
             } else {
-                alert("Please fill in all required fields");
+                if (!mobileInput || !mobileInput.value.trim() || /^9\d{9}$/.test(mobileInput.value.replace(/[^0-9]/g, ''))) {
+                    alert("Please fill in all required fields");
+                }
             }
         });
 });

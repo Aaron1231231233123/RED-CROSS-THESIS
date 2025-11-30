@@ -258,6 +258,82 @@
 
         // Wire up duplicate checker once the form is available
         initializeAdminDuplicateChecker();
+
+        // Initialize PH mobile number validation
+        initializePhMobileValidation();
+    }
+
+    /**
+     * Initialize Philippine Mobile Number Validation
+     * Enforces 10-digit format starting with 9 (equivalent to 09 when used with +63 prefix)
+     */
+    function initializePhMobileValidation() {
+        const mobileInput = document.getElementById('mobile');
+        if (!mobileInput) {
+            return;
+        }
+
+        // Make sanitizePhMobile function globally available
+        window.sanitizePhMobile = function(inputEl) {
+            if (!inputEl) return;
+            
+            // Keep digits only
+            let digits = (inputEl.value || '').replace(/[^0-9]/g, '');
+            
+            // Enforce first digit must be 9 (equivalent to 09 when using +63 prefix)
+            if (digits.length > 0 && digits.charAt(0) !== '9') {
+                // If user typed 0 first, drop it so the sequence begins with 9 as required for PH mobiles
+                digits = digits.replace(/^0+/, '');
+            }
+            
+            // Limit to 10 digits
+            if (digits.length > 10) {
+                digits = digits.slice(0, 10);
+            }
+            
+            inputEl.value = digits;
+
+            // Realtime validity styling
+            if (digits.length === 10 && digits.charAt(0) === '9') {
+                inputEl.setCustomValidity('');
+                inputEl.style.borderColor = '';
+                inputEl.style.backgroundColor = '';
+                inputEl.classList.remove('is-invalid');
+                inputEl.classList.add('is-valid');
+            } else {
+                inputEl.setCustomValidity('Enter 10 digits starting with 9');
+                inputEl.style.borderColor = '#dc3545';
+                inputEl.style.backgroundColor = 'rgba(220, 53, 69, 0.05)';
+                inputEl.classList.remove('is-valid');
+                if (digits.length > 0) {
+                    inputEl.classList.add('is-invalid');
+                }
+            }
+        };
+
+        // Add event listeners for validation
+        mobileInput.addEventListener('input', function() {
+            window.sanitizePhMobile(this);
+        });
+
+        mobileInput.addEventListener('blur', function() {
+            window.sanitizePhMobile(this);
+        });
+
+        // Validate on form submission
+        const form = document.getElementById('adminDonorPersonalDataForm');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const mobileValue = mobileInput.value.replace(/[^0-9]/g, '');
+                if (!/^9\d{9}$/.test(mobileValue)) {
+                    e.preventDefault();
+                    mobileInput.focus();
+                    mobileInput.classList.add('is-invalid');
+                    alert('Please enter a valid Philippine mobile number (10 digits starting with 9, e.g., 9123456789).');
+                    return false;
+                }
+            });
+        }
     }
 
     /**
@@ -797,8 +873,26 @@
                 }
             });
 
+            // Special validation for mobile number in section 5
+            if (currentSection === 5) {
+                const mobileInput = document.getElementById('mobile');
+                if (mobileInput) {
+                    const mobileValue = mobileInput.value.replace(/[^0-9]/g, '');
+                    if (!/^9\d{9}$/.test(mobileValue)) {
+                        mobileInput.classList.add('is-invalid');
+                        isValid = false;
+                        alert('Please enter a valid Philippine mobile number (10 digits starting with 9, e.g., 9123456789).');
+                    } else {
+                        mobileInput.classList.remove('is-invalid');
+                        mobileInput.classList.add('is-valid');
+                    }
+                }
+            }
+
             if (!isValid) {
-                alert('Please fill in all required fields before proceeding.');
+                if (currentSection !== 5) {
+                    alert('Please fill in all required fields before proceeding.');
+                }
                 return;
             }
 
@@ -965,6 +1059,20 @@
 
         // Prepare form data
         const formData = new FormData(form);
+        
+        // Normalize mobile to 11 digits starting with 0 before sending to API
+        const mobileInput = document.getElementById('mobile');
+        if (mobileInput) {
+            const raw = (mobileInput.value || '').replace(/[^0-9]/g, '');
+            if (/^9\d{9}$/.test(raw)) {
+                // Convert 10-digit format (9xxxxxxxxx) to 11-digit format (09xxxxxxxxx)
+                formData.set('mobile', '0' + raw);
+            } else if (/^0\d{10}$/.test(raw)) {
+                // Already in 11-digit format
+                formData.set('mobile', raw);
+            }
+        }
+        
         formData.append('step', '1');
 
         // Submit to API
