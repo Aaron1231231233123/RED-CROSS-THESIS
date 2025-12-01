@@ -1259,6 +1259,8 @@ h6 {
                             }
                             // Helper to render small buffer badge when buffer units exist for a type
                             function renderBufferPillHome($type, $bufferTypes) {
+                                // Buffer display hidden per user request
+                                return '';
                                 $count = isset($bufferTypes[$type]) ? (int)$bufferTypes[$type] : 0;
                                 if ($count > 0) {
                                     return '<span class="buffer-pill ms-2" title="Units held in buffer reserve">' . $count . ' in buffer</span>';
