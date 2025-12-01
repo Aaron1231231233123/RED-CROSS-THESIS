@@ -48,6 +48,7 @@
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     padding: 1.5rem;
     border-bottom: 1px solid #dee2e6;
+    position: relative;
 }
 
 .admin-screening-progress-steps {
@@ -55,7 +56,7 @@
     justify-content: space-between;
     align-items: center;
     position: relative;
-    margin-bottom: 1rem;
+    z-index: 2;
 }
 
 .admin-screening-step {
@@ -110,11 +111,12 @@
 
 .admin-screening-progress-line {
     position: absolute;
-    top: 20px;
+    top: 40%;
     left: 0;
     right: 0;
     height: 2px;
     background: #dee2e6;
+    transform: translateY(-50%);
     z-index: 1;
 }
 

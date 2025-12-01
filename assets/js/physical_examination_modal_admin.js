@@ -202,9 +202,9 @@ class PhysicalExaminationModalAdmin {
     
     updateSummaryFromData(data) {
         // Update vital signs in summary
-        const bpValue = data.blood_pressure || '-';
-        const pulseRate = data.pulse_rate || '-';
-        const bodyTemp = data.body_temp || '-';
+        const bpValue = data.blood_pressure || 'Not specified';
+        const pulseRate = data.pulse_rate || 'Not specified';
+        const bodyTemp = data.body_temp || 'Not specified';
         
         const bpEl = document.getElementById('summary-blood-pressure-admin');
         const pulseEl = document.getElementById('summary-pulse-rate-admin');
@@ -220,10 +220,10 @@ class PhysicalExaminationModalAdmin {
         const heentEl = document.getElementById('summary-heent-admin');
         const heartLungsEl = document.getElementById('summary-heart-lungs-admin');
         
-        if (genAppEl) genAppEl.textContent = data.gen_appearance || '-';
-        if (skinEl) skinEl.textContent = data.skin || '-';
-        if (heentEl) heentEl.textContent = data.heent || '-';
-        if (heartLungsEl) heartLungsEl.textContent = data.heart_and_lungs || '-';
+        if (genAppEl) genAppEl.textContent = data.gen_appearance || 'Not specified';
+        if (skinEl) skinEl.textContent = data.skin || 'Not specified';
+        if (heentEl) heentEl.textContent = data.heent || 'Not specified';
+        if (heartLungsEl) heartLungsEl.textContent = data.heart_and_lungs || 'Not specified';
         
         // Update physician name if available
         if (data.physician) {
@@ -231,10 +231,10 @@ class PhysicalExaminationModalAdmin {
             if (physicianEl) physicianEl.textContent = data.physician;
         }
         
-        // Update blood bag type if available
-        if (data.blood_bag_type) {
-            const bloodBagEl = document.getElementById('summary-blood-bag-admin');
-            if (bloodBagEl) bloodBagEl.textContent = data.blood_bag_type;
+        // Update blood bag type if available (default to Single)
+        const bloodBagEl = document.getElementById('summary-blood-bag-admin');
+        if (bloodBagEl) {
+            bloodBagEl.textContent = data.blood_bag_type || 'Single';
         }
     }
     
@@ -605,28 +605,42 @@ class PhysicalExaminationModalAdmin {
     }
     
     updateSummary() {
-        
-        // Update vital signs
+        // Update vital signs summary
         const systolic = document.getElementById('physical-blood-pressure-systolic-admin')?.value || '';
         const diastolic = document.getElementById('physical-blood-pressure-diastolic-admin')?.value || '';
-        const bloodPressure = (systolic && diastolic) ? `${systolic}/${diastolic}` : '-';
-        const pulseRate = document.getElementById('physical-pulse-rate-admin')?.value || '-';
-        const bodyTemp = document.getElementById('physical-body-temp-admin')?.value || '-';
+        const bpValue = (systolic && diastolic) ? `${systolic}/${diastolic}` : 'Not specified';
+        const pulseRate = document.getElementById('physical-pulse-rate-admin')?.value || 'Not specified';
+        const bodyTemp = document.getElementById('physical-body-temp-admin')?.value || 'Not specified';
         
-        document.getElementById('summary-blood-pressure-admin').textContent = bloodPressure;
-        document.getElementById('summary-pulse-rate-admin').textContent = pulseRate;
-        document.getElementById('summary-body-temp-admin').textContent = bodyTemp;
+        const bpEl = document.getElementById('summary-blood-pressure-admin');
+        const pulseEl = document.getElementById('summary-pulse-rate-admin');
+        const tempEl = document.getElementById('summary-body-temp-admin');
+        
+        if (bpEl) bpEl.textContent = bpValue;
+        if (pulseEl) pulseEl.textContent = pulseRate;
+        if (tempEl) tempEl.textContent = bodyTemp;
         
         // Update examination findings
-        const genAppearance = document.getElementById('physical-gen-appearance-admin')?.value || '-';
-        const skin = document.getElementById('physical-skin-admin')?.value || '-';
-        const heent = document.getElementById('physical-heent-admin')?.value || '-';
-        const heartLungs = document.getElementById('physical-heart-lungs-admin')?.value || '-';
+        const genAppearance = document.getElementById('physical-gen-appearance-admin')?.value || 'Not specified';
+        const skin = document.getElementById('physical-skin-admin')?.value || 'Not specified';
+        const heent = document.getElementById('physical-heent-admin')?.value || 'Not specified';
+        const heartLungs = document.getElementById('physical-heart-lungs-admin')?.value || 'Not specified';
         
-        document.getElementById('summary-gen-appearance-admin').textContent = genAppearance;
-        document.getElementById('summary-skin-admin').textContent = skin;
-        document.getElementById('summary-heent-admin').textContent = heent;
-        document.getElementById('summary-heart-lungs-admin').textContent = heartLungs;
+        const genAppEl = document.getElementById('summary-gen-appearance-admin');
+        const skinEl = document.getElementById('summary-skin-admin');
+        const heentEl = document.getElementById('summary-heent-admin');
+        const heartLungsEl = document.getElementById('summary-heart-lungs-admin');
+        
+        if (genAppEl) genAppEl.textContent = genAppearance;
+        if (skinEl) skinEl.textContent = skin;
+        if (heentEl) heentEl.textContent = heent;
+        if (heartLungsEl) heartLungsEl.textContent = heartLungs;
+        
+        // Update blood bag type (default to Single when hidden)
+        const selectedBloodBag = document.querySelector('#physicalExaminationModalAdmin input[name="blood_bag_type"]:checked');
+        const bagText = selectedBloodBag ? selectedBloodBag.value : 'Single';
+        const bagEl = document.getElementById('summary-blood-bag-admin');
+        if (bagEl) bagEl.textContent = bagText;
     }
     
     async submitForm() {

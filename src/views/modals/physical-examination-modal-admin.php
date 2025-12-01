@@ -207,72 +207,101 @@ if (isset($_SESSION['user_id'])) {
                     <h4>Step 3: Review & Submit</h4>
                     <p class="text-muted">Please review all information before submitting</p>
                     
-                    <div class="physical-review-section">
-                        <div class="row g-4">
-                            <div class="col-lg-8">
-                                <div class="physical-review-card">
-                                    <h6 class="physical-review-title">Physical Examination Summary</h6>
-                                    <div class="physical-review-group">
-                                        <div class="physical-review-subtitle"><i class="fas fa-heartbeat me-2"></i>Vital Signs</div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">Blood Pressure</span>
-                                            <span class="physical-review-value" id="summary-blood-pressure-admin">-</span>
-                                        </div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">Pulse Rate</span>
-                                            <span class="physical-review-value" id="summary-pulse-rate-admin">-</span>
-                                        </div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">Body Temperature</span>
-                                            <span class="physical-review-value" id="summary-body-temp-admin">-</span>
-                                        </div>
+                    <div class="examination-report">
+                        <!-- Header Section -->
+                        <div class="report-header">
+                            <div class="report-title">
+                                <h5>Physical Examination Report</h5>
+                                <div class="report-meta">
+                                    <span class="report-date"><?php echo date('F j, Y'); ?></span>
+                                    <span class="report-physician">Physician: <span id="summary-interviewer-admin"><?php echo htmlspecialchars($physical_exam_physician_name, ENT_QUOTES, 'UTF-8'); ?></span></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Vital Signs Section -->
+                        <div class="report-section">
+                            <div class="section-header">
+                                <i class="fas fa-heartbeat"></i>
+                                <span>Vital Signs</span>
+                            </div>
+                            <div class="section-content">
+                                <div class="vital-signs-grid">
+                                    <div class="vital-item">
+                                        <span class="vital-label">Blood Pressure:</span>
+                                        <span class="vital-value" id="summary-blood-pressure-admin">-</span>
                                     </div>
-                                    <div class="physical-review-group">
-                                        <div class="physical-review-subtitle"><i class="fas fa-user-md me-2"></i>Examination Findings</div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">General Appearance</span>
-                                            <span class="physical-review-value" id="summary-gen-appearance-admin">-</span>
-                                        </div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">Skin</span>
-                                            <span class="physical-review-value" id="summary-skin-admin">-</span>
-                                        </div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">HEENT</span>
-                                            <span class="physical-review-value" id="summary-heent-admin">-</span>
-                                        </div>
-                                        <div class="physical-review-item">
-                                            <span class="physical-review-label">Heart &amp; Lungs</span>
-                                            <span class="physical-review-value" id="summary-heart-lungs-admin">-</span>
-                                        </div>
+                                    <div class="vital-item">
+                                        <span class="vital-label">Pulse Rate:</span>
+                                        <span class="vital-value" id="summary-pulse-rate-admin">-</span>
+                                        <span class="vital-unit">BPM</span>
+                                    </div>
+                                    <div class="vital-item">
+                                        <span class="vital-label">Temperature:</span>
+                                        <span class="vital-value" id="summary-body-temp-admin">-</span>
+                                        <span class="vital-unit">°C</span>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-lg-4">
-                                <div class="physical-review-card">
-                                    <h6 class="physical-review-title">Assessment &amp; Next Step</h6>
-                                    <div class="physical-review-item">
-                                        <span class="physical-review-label">Medical Assessment</span>
-                                        <span class="physical-review-value">Accepted for Blood Collection</span>
+                        </div>
+                        
+                        <!-- Physical Examination Section -->
+                        <div class="report-section">
+                            <div class="section-header">
+                                <i class="fas fa-user-md"></i>
+                                <span>Physical Examination Findings</span>
+                            </div>
+                            <div class="section-content">
+                                <div class="examination-findings">
+                                    <div class="finding-row">
+                                        <span class="finding-label">General Appearance:</span>
+                                        <span class="finding-value" id="summary-gen-appearance-admin">-</span>
                                     </div>
-                                    <div class="physical-review-item">
-                                        <span class="physical-review-label">Next Step</span>
-                                        <span class="physical-review-value">Proceed to Blood Collection</span>
+                                    <div class="finding-row">
+                                        <span class="finding-label">Skin:</span>
+                                        <span class="finding-value" id="summary-skin-admin">-</span>
+                                    </div>
+                                    <div class="finding-row">
+                                        <span class="finding-label">HEENT:</span>
+                                        <span class="finding-value" id="summary-heent-admin">-</span>
+                                    </div>
+                                    <div class="finding-row">
+                                        <span class="finding-label">Heart and Lungs:</span>
+                                        <span class="finding-value" id="summary-heart-lungs-admin">-</span>
                                     </div>
                                 </div>
-                                <div class="physical-review-card mt-4">
-                                    <h6 class="physical-review-title">Physician Details</h6>
-                                    <div class="physical-review-item">
-                                        <span class="physical-review-label">Physician</span>
-                                        <span class="physical-review-value" id="summary-interviewer-admin"><?php echo htmlspecialchars($physical_exam_physician_name, ENT_QUOTES, 'UTF-8'); ?></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Assessment & Conclusion -->
+                        <div class="report-section">
+                            <div class="section-header">
+                                <i class="fas fa-clipboard-check"></i>
+                                <span>Assessment & Conclusion</span>
+                            </div>
+                            <div class="section-content">
+                                <div class="assessment-content">
+                                    <div class="assessment-result">
+                                        <span class="result-label">Medical Assessment:</span>
+                                        <span class="result-value">Accepted for Blood Collection</span>
                                     </div>
-                                    <div class="physical-review-item">
-                                        <span class="physical-review-label">Examination Date</span>
-                                        <span class="physical-review-value"><?php echo date('F j, Y'); ?></span>
+                                    <div class="assessment-collection">
+                                        <span class="collection-label">Blood Collection:</span>
+                                        <span class="collection-value" id="summary-blood-bag-admin">-</span>
                                     </div>
-                                    <p class="physical-review-note">
-                                        This examination was conducted in accordance with Philippine Red Cross standards and protocols.
-                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Signature Section -->
+                        <div class="report-signature">
+                            <div class="signature-content">
+                                <div class="signature-line">
+                                    <span>Examining Physician</span>
+                                    <span class="physician-name"><?php echo htmlspecialchars($physical_exam_physician_name, ENT_QUOTES, 'UTF-8'); ?></span>
+                                </div>
+                                <div class="signature-note">
+                                    This examination was conducted in accordance with Philippine Red Cross standards and protocols.
                                 </div>
                             </div>
                         </div>
