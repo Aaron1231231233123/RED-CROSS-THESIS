@@ -100,7 +100,7 @@
                                     <span class="admin-screening-input-suffix">kg</span>
                                 </div>
                                 <div id="adminBodyWeightAlert" class="text-danger mt-1" style="display: none; font-size: 0.875rem;">
-                                    ⚠️ Minimum eligible weight is 50 kg. Donation must be deferred for donor safety.
+                                    ⚠️ Body weight must be between 50-120 kg for donor safety.
                                 </div>
                             </div>
                             <div class="col-12">

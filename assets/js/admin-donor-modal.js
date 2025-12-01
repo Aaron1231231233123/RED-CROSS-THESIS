@@ -947,281 +947,56 @@ window.handleMedicalHistoryApprovalFromInterviewer = function(donorId, action) {
             proceedApproval();
         }
     } else if (action === 'decline') {
-        // Use the declineMedicalHistoryModal from modal content
-        const declineModal = document.getElementById('declineMedicalHistoryModal');
-        if (declineModal) {
-            // Use the modal stacking utility if available, otherwise calculate dynamically
-            if (typeof applyModalStacking === 'function') {
-                applyModalStacking(declineModal);
-            } else {
-                // Fallback: Calculate z-index based on open modals
-                const openModals = document.querySelectorAll('.modal.show, .medical-history-modal.show');
-                let maxZIndex = 1050;
-                openModals.forEach(m => {
-                    if (m === declineModal) return;
-                    const z = parseInt(window.getComputedStyle(m).zIndex) || parseInt(m.style.zIndex) || 0;
-                    if (z > maxZIndex) maxZIndex = z;
-                });
-                const newZIndex = maxZIndex + 10;
-                declineModal.style.zIndex = newZIndex.toString();
-                declineModal.style.position = 'fixed';
-                const dialog = declineModal.querySelector('.modal-dialog');
-                if (dialog) dialog.style.zIndex = (newZIndex + 1).toString();
-                const content = declineModal.querySelector('.modal-content');
-                if (content) content.style.zIndex = (newZIndex + 2).toString();
-                
-                setTimeout(() => {
-                    const backdrops = document.querySelectorAll('.modal-backdrop');
-                    if (backdrops.length > 0) {
-                        backdrops[backdrops.length - 1].style.zIndex = (newZIndex - 1).toString();
-                    }
-                }, 10);
-            }
-            
-            const modal = bootstrap.Modal.getOrCreateInstance(declineModal);
-            modal.show();
-            
-            // Bind confirmation handler
-            const confirmDeclineBtn = document.getElementById('confirmDeclineBtn');
-            const declineReason = document.getElementById('declineReason');
-            const declineCharCount = document.getElementById('declineCharCount');
-            
-            // Character count and validation
-            if (declineReason && declineCharCount) {
-                declineReason.addEventListener('input', function() {
-                    const length = this.value.length;
-                    declineCharCount.textContent = `${length}/500 characters`;
-                    
-                    // Enable/disable submit button based on minimum length
-                    if (confirmDeclineBtn) {
-                        if (length >= 10) {
-                            confirmDeclineBtn.disabled = false;
-                            confirmDeclineBtn.classList.remove('btn-secondary');
-                            confirmDeclineBtn.classList.add('btn-primary');
-                        } else {
-                            confirmDeclineBtn.disabled = true;
-                            confirmDeclineBtn.classList.remove('btn-primary');
-                            confirmDeclineBtn.classList.add('btn-secondary');
-                        }
-                    }
-                });
-            }
-            
-            if (confirmDeclineBtn) {
-                // Remove existing event listeners by cloning
-                const newConfirmBtn = confirmDeclineBtn.cloneNode(true);
-                confirmDeclineBtn.parentNode.replaceChild(newConfirmBtn, confirmDeclineBtn);
-                
-                newConfirmBtn.addEventListener('click', function() {
-                    const reason = declineReason ? declineReason.value.trim() : '';
-                    if (reason.length < 10) {
-                        alert('Please provide a reason with at least 10 characters.');
-                        return;
-                    }
-                    
-                    // Process decline
-                    const declineBtn = document.getElementById('viewMHDeclineBtn');
-                    const originalText = declineBtn ? declineBtn.innerHTML : '';
-                    if (declineBtn) {
-                        declineBtn.disabled = true;
-                        declineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
-                    }
-                    
-                    // Use the process_medical_history_approval.php endpoint
-                    const formData = new FormData();
-                    formData.append('action', 'decline_medical_history');
-                    formData.append('donor_id', donorId);
-                    formData.append('decline_reason', reason);
-                    
-                    fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (declineBtn) {
-                            declineBtn.disabled = false;
-                            declineBtn.innerHTML = originalText;
-                        }
-                        
-                        if (data.success) {
-                            console.log('Medical history declined successfully');
-                            // Refresh donor modal if it's open
-                            const donorModal = document.getElementById('donorModal');
-                            if (donorModal && donorModal.classList.contains('show')) {
-                                const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${currentDonorId}`;
-                                if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
-                                    setTimeout(() => {
-                                        AdminDonorModal.fetchDonorDetails(currentDonorId, eligibilityId);
-                                    }, 500);
-                                } else if (typeof window.fetchDonorDetails === 'function') {
-                                    setTimeout(() => {
-                                        window.fetchDonorDetails(currentDonorId, eligibilityId);
-                                    }, 500);
-                                }
-                            }
-                            // Close decline modal
-                            modal.hide();
-                            // Close medical history modal
-                            closeMedicalHistoryModal();
-                            // Show success modal
-                            setTimeout(() => {
-                                const declinedModal = document.getElementById('medicalHistoryDeclinedModal');
-                                if (declinedModal) {
-                                    const successModal = new bootstrap.Modal(declinedModal);
-                                    successModal.show();
-                                }
-                                refreshDonorDetailsAfterMHApproval(currentDonorId);
-                            }, 300);
-                        } else {
-                            alert('Failed to decline medical history: ' + (data.message || 'Unknown error'));
-                        }
-                    })
-                    .catch(error => {
-                        if (declineBtn) {
-                            declineBtn.disabled = false;
-                            declineBtn.innerHTML = originalText;
-                        }
-                        console.error('Error declining medical history:', error);
-                        alert('Error declining medical history: ' + error.message);
-                    });
-                });
-            }
+        // Use the correct medicalHistoryDeclineModal (from medical-history-approval-modals.php)
+        // This modal has deferral type and duration options like the staff dashboard
+        if (typeof showMedicalHistoryDeclineModal === 'function') {
+            showMedicalHistoryDeclineModal(donorId);
         } else {
-            // Fallback: Try to find the modal again after a short delay (it might be loading)
-            setTimeout(() => {
-                const retryModal = document.getElementById('declineMedicalHistoryModal');
-                if (retryModal) {
-                    // Retry with the modal
-                    retryModal.style.zIndex = '1070';
-                    const dialog = retryModal.querySelector('.modal-dialog');
-                    if (dialog) {
-                        dialog.style.zIndex = '1071';
-                    }
-                    const modal = new bootstrap.Modal(retryModal);
-                    modal.show();
-                    
-                    // Update backdrop z-index
-                    setTimeout(() => {
-                        const backdrops = document.querySelectorAll('.modal-backdrop');
-                        if (backdrops && backdrops.length > 0) {
-                            backdrops[backdrops.length - 1].style.zIndex = '1069';
-                        }
-                    }, 10);
-                    
-                    // Bind confirmation handler
-                    const confirmDeclineBtn = document.getElementById('confirmDeclineBtn');
-                    const declineReason = document.getElementById('declineReason');
-                    const declineCharCount = document.getElementById('declineCharCount');
-                    
-                    // Character count and validation
-                    if (declineReason && declineCharCount) {
-                        declineReason.addEventListener('input', function() {
-                            const length = this.value.length;
-                            declineCharCount.textContent = `${length}/500 characters`;
-                            
-                            // Enable/disable submit button based on minimum length
-                            if (confirmDeclineBtn) {
-                                if (length >= 10) {
-                                    confirmDeclineBtn.disabled = false;
-                                    confirmDeclineBtn.classList.remove('btn-secondary');
-                                    confirmDeclineBtn.classList.add('btn-primary');
-                                } else {
-                                    confirmDeclineBtn.disabled = true;
-                                    confirmDeclineBtn.classList.remove('btn-primary');
-                                    confirmDeclineBtn.classList.add('btn-secondary');
-                                }
-                            }
-                        });
-                    }
-                    
-                    if (confirmDeclineBtn) {
-                        // Remove existing event listeners by cloning
-                        const newConfirmBtn = confirmDeclineBtn.cloneNode(true);
-                        confirmDeclineBtn.parentNode.replaceChild(newConfirmBtn, confirmDeclineBtn);
-                        
-                        newConfirmBtn.addEventListener('click', function() {
-                            const reason = declineReason ? declineReason.value.trim() : '';
-                            if (reason.length < 10) {
-                                alert('Please provide a reason with at least 10 characters.');
-                                return;
-                            }
-                            
-                            // Process decline (same as above)
-                            const declineBtn = document.getElementById('viewMHDeclineBtn');
-                            const originalText = declineBtn ? declineBtn.innerHTML : '';
-                            if (declineBtn) {
-                                declineBtn.disabled = true;
-                                declineBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
-                            }
-                            
-                            // Use the process_medical_history_approval.php endpoint
-                            const formData = new FormData();
-                            formData.append('action', 'decline_medical_history');
-                            formData.append('donor_id', donorId);
-                            formData.append('decline_reason', reason);
-                            
-                            fetch(`../../assets/php_func/admin/process_medical_history_approval_admin.php`, {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (declineBtn) {
-                                    declineBtn.disabled = false;
-                                    declineBtn.innerHTML = originalText;
-                                }
-                                
-                                if (data.success) {
-                                    console.log('Medical history declined successfully');
-                                    // Refresh donor modal if it's open
-                                    const donorModal = document.getElementById('donorModal');
-                                    if (donorModal && donorModal.classList.contains('show')) {
-                                        const eligibilityId = window.currentDetailsEligibilityId || window.currentEligibilityId || `pending_${currentDonorId}`;
-                                        if (typeof AdminDonorModal !== 'undefined' && AdminDonorModal && AdminDonorModal.fetchDonorDetails) {
-                                            setTimeout(() => {
-                                                AdminDonorModal.fetchDonorDetails(currentDonorId, eligibilityId);
-                                            }, 500);
-                                        } else if (typeof window.fetchDonorDetails === 'function') {
-                                            setTimeout(() => {
-                                                window.fetchDonorDetails(currentDonorId, eligibilityId);
-                                            }, 500);
-                                        }
-                                    }
-                                    // Close decline modal
-                                    modal.hide();
-                                    // Close medical history modal
-                                    closeMedicalHistoryModal();
-                                    // Show success modal
-                                    setTimeout(() => {
-                                        const declinedModal = document.getElementById('medicalHistoryDeclinedModal');
-                                        if (declinedModal) {
-                                            const successModal = new bootstrap.Modal(declinedModal);
-                                            successModal.show();
-                                        }
-                                        refreshDonorDetailsAfterMHApproval(currentDonorId);
-                                    }, 300);
-                                } else {
-                                    alert('Failed to decline medical history: ' + (data.message || 'Unknown error'));
-                                }
-                            })
-                            .catch(error => {
-                                if (declineBtn) {
-                                    declineBtn.disabled = false;
-                                    declineBtn.innerHTML = originalText;
-                                }
-                                console.error('Error declining medical history:', error);
-                                alert('Error declining medical history: ' + error.message);
-                            });
-                        });
+            // Fallback: try to open modal directly
+            const declineModal = document.getElementById('medicalHistoryDeclineModal');
+            if (declineModal) {
+                window.currentDonorId = donorId;
+                
+                // Set donor ID in hidden input
+                const donorIdInput = declineModal.querySelector('input[name="donor_id"]');
+                if (!donorIdInput) {
+                    const form = declineModal.querySelector('form') || declineModal.querySelector('.modal-body');
+                    if (form) {
+                        const hiddenInput = document.createElement('input');
+                        hiddenInput.type = 'hidden';
+                        hiddenInput.name = 'donor_id';
+                        hiddenInput.value = donorId;
+                        form.appendChild(hiddenInput);
                     }
                 } else {
-                    // Final fallback: Show error message
-                    console.error('Decline modal not found. Please refresh the page.');
-                    alert('Error: Decline modal not available. Please refresh the page.');
+                    donorIdInput.value = donorId;
                 }
-            }, 100);
-            return; // Exit early to prevent the old prompt code from running
+                
+                if (typeof applyModalStacking === 'function') {
+                    applyModalStacking(declineModal);
+                }
+                
+                const modal = new bootstrap.Modal(declineModal);
+                modal.show();
+                
+                // Initialize submit handler
+                declineModal.addEventListener('shown.bs.modal', function() {
+                    setTimeout(() => {
+                        const submitDeclineBtn = document.getElementById('submitDeclineBtn');
+                        if (submitDeclineBtn && typeof handleMedicalHistoryDeclineSubmit === 'function') {
+                            const newSubmitBtn = submitDeclineBtn.cloneNode(true);
+                            submitDeclineBtn.parentNode.replaceChild(newSubmitBtn, submitDeclineBtn);
+                            newSubmitBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                handleMedicalHistoryDeclineSubmit();
+                            });
+                        }
+                    }, 100);
+                }, { once: true });
+            } else {
+                console.error('Medical history decline modal not found');
+                alert('Error: Decline modal not found. Please refresh the page.');
+            }
         }
     }
 };

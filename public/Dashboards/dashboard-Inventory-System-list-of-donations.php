@@ -2876,11 +2876,11 @@ function getCacheStats() {
                     return;
                 }
                 
-                // Show modal immediately with loading state - don't wait for access checks
+                // Show modal immediately with loading state
                 const donorModal = document.getElementById('donorModal');
                 const legacyDetails = document.getElementById('donorDetails');
                 if (donorModal && legacyDetails) {
-                    // Set loading state immediately
+                    // Set loading state
                     legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
                     // Show modal immediately
                     try {
@@ -2894,6 +2894,7 @@ function getCacheStats() {
                 const proceed = () => {
                     window.currentAdminDonorId = numericDonorId;
                     console.log('[Admin] Opening donor details for ID:', numericDonorId);
+                    
                     if (window.AccessLockManagerAdmin) {
                         if (!window.AccessLockManagerAdmin.initialized) {
                             console.warn('[Admin] AccessLockManagerAdmin not initialized, initializing now...');
@@ -2910,54 +2911,45 @@ function getCacheStats() {
                     }
                     baseOpenDetails(numericDonorId, eligibilityId);
                 };
+                
+                const onBlocked = () => {
+                    // Close donor modal - AccessLockGuardAdmin will show its own "Access Restricted" modal
+                    const donorModal = document.getElementById('donorModal');
+                    if (donorModal) {
+                        try {
+                            const modalInstance = bootstrap.Modal.getInstance(donorModal);
+                            if (modalInstance) {
+                                modalInstance.hide();
+                            }
+                        } catch(e) {
+                            console.warn('Error hiding donor modal:', e);
+                        }
+                    }
+                    // Don't show additional alert - AccessLockGuardAdmin handles the error modal
+                };
+                
+                // Check access after modal is shown
                 if (window.AccessLockGuardAdmin) {
                     AccessLockGuardAdmin.ensureAccess({
                         scope: ['medical_history', 'physical_examination', 'blood_collection'],
                         donorId: numericDonorId,
                         lockValue: 2,
+                        message: 'This donor is currently being processed by a staff account. Please try again later.',
                         messages: {
-                            medical_history: 'This donor is being processed in the Interviewer stage.',
-                            physical_examination: 'This donor is being processed in the Interviewer stage.',
-                            blood_collection: 'This donor is being processed in the Phlebotomist stage.'
+                            medical_history: 'This donor is currently being processed by a staff account. Please try again later.',
+                            physical_examination: 'This donor is currently being processed by a staff account. Please try again later.',
+                            blood_collection: 'This donor is currently being processed by a staff account. Please try again later.'
                         },
-                        onAllowed: proceed
+                        onAllowed: proceed,
+                        onBlocked: onBlocked
                     });
                 } else {
                     proceed();
                 }
             }
-            const baseOpenDetailsGuarded = openDetails;
-            openDetails = function(donorId, eligibilityId) {
-                if (!donorId) return;
-                
-                // Show modal immediately with loading state - don't wait for access checks
-                const donorModal = document.getElementById('donorModal');
-                const legacyDetails = document.getElementById('donorDetails');
-                if (donorModal && legacyDetails) {
-                    // Set loading state immediately
-                    legacyDetails.innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading donor details...</p></div>';
-                    // Show modal immediately
-                    try {
-                        const modalInstance = bootstrap.Modal.getInstance(donorModal) || new bootstrap.Modal(donorModal);
-                        modalInstance.show();
-                    } catch(e) {
-                        console.warn('Error showing modal:', e);
-                    }
-                }
-                
-                const proceed = () => baseOpenDetailsGuarded(donorId, eligibilityId);
-                if (window.AccessLockGuardAdmin) {
-                    AccessLockGuardAdmin.ensureAccess({
-                        scope: ['blood_collection', 'medical_history', 'physical_examination'],
-                        donorId,
-                        lockValue: 2,
-                        message: 'This donor is currently being processed by a staff account. Please try again later.',
-                        onAllowed: proceed
-                    });
-                } else {
-                    proceed();
-                }
-            };
+            // openDetails already shows modal immediately, so no need to wrap it again
+            // Expose openDetails globally for use by other functions
+            window.openDonorDetailsWithAccessCheck = openDetails;
             // Explicit listeners (replicates previous working approach)
             document.querySelectorAll('.view-donor').forEach(function(btn){
                 btn.addEventListener('click', function(e){
@@ -3253,6 +3245,7 @@ function getCacheStats() {
     ?>
     <!-- Admin modal styles/scripts -->
     <link rel="stylesheet" href="../../assets/css/medical-history-approval-modals.css">
+    <link rel="stylesheet" href="../../assets/css/defer-donor-modal.css">
     <!-- Optional: physical exam modal CSS; load only if present -->
     <link rel="preload" as="style" href="../../assets/css/physical-examination-modal.css" onload="this.rel='stylesheet'" crossorigin>
     <noscript><link rel="stylesheet" href="../../assets/css/physical-examination-modal.css"></noscript>
@@ -3271,6 +3264,12 @@ function getCacheStats() {
             s.src = '../../assets/js/medical-history-approval.js';
             s.defer = true;
             document.currentScript.parentNode.insertBefore(s, document.currentScript.nextSibling);
+            
+            // Also load medical history decline handler
+            const declineScript = document.createElement('script');
+            declineScript.src = '../../assets/js/medical-history-decline.js';
+            declineScript.defer = true;
+            document.currentScript.parentNode.insertBefore(declineScript, document.currentScript.nextSibling);
             
             // Admin-specific override: Force close modal after approval
             s.onload = function() {
@@ -3900,41 +3899,48 @@ function getCacheStats() {
             }
         }
         // Function to show medical history decline modal
+        // Matches staff dashboard: just open modal, let included script handle initialization
         function showMedicalHistoryDeclineModal(donorId) {
-            // Use the existing medical history decline modal
-            const declineModal = document.getElementById('declineMedicalHistoryModal');
+            window.currentDonorId = donorId;
+            
+            const declineModal = document.getElementById('medicalHistoryDeclineModal');
             if (declineModal) {
-                // Apply proper modal stacking BEFORE showing
+                // Set donor ID in hidden input
+                const donorIdInput = declineModal.querySelector('input[name="donor_id"]');
+                if (!donorIdInput) {
+                    const form = declineModal.querySelector('form') || declineModal.querySelector('.modal-body');
+                    if (form) {
+                        const hiddenInput = document.createElement('input');
+                        hiddenInput.type = 'hidden';
+                        hiddenInput.name = 'donor_id';
+                        hiddenInput.value = donorId;
+                        form.appendChild(hiddenInput);
+                    }
+                } else {
+                    donorIdInput.value = donorId;
+                }
+                
                 applyModalStacking(declineModal);
                 
-                // Create and show Bootstrap modal
-                const modal = bootstrap.Modal.getOrCreateInstance(declineModal);
+                // Open modal - included script handles initialization
+                const modal = new bootstrap.Modal(declineModal);
                 modal.show();
                 
-                // Bind decline handler
-                const submitBtn = document.getElementById('confirmDeclineBtn');
-                if (submitBtn) {
-                    // Remove existing event listeners by cloning
-                    const newSubmitBtn = submitBtn.cloneNode(true);
-                    submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
-                    
-                    newSubmitBtn.addEventListener('click', function() {
-                        const reasonInput = document.getElementById('declineReason');
-                        const reason = reasonInput ? reasonInput.value.trim() : '';
-                        if (reason.length < 10) {
-                            if (window.adminModal && window.adminModal.alert) {
-                                window.adminModal.alert('Please provide a reason with at least 10 characters.');
-                            } else {
-                                console.error('Admin modal not available');
-                            }
-                            return;
+                // Initialize submit handler (same as staff dashboard)
+                declineModal.addEventListener('shown.bs.modal', function() {
+                    setTimeout(() => {
+                        const submitDeclineBtn = document.getElementById('submitDeclineBtn');
+                        if (submitDeclineBtn && typeof handleMedicalHistoryDeclineSubmit === 'function') {
+                            const newSubmitBtn = submitDeclineBtn.cloneNode(true);
+                            submitDeclineBtn.parentNode.replaceChild(newSubmitBtn, submitDeclineBtn);
+                            newSubmitBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                handleMedicalHistoryDeclineSubmit();
+                            });
                         }
-                        processMedicalHistoryDecline(donorId, reason);
-                        modal.hide();
-                    });
-                }
+                    }, 100);
+                }, { once: true });
             } else {
-                // Fallback: direct decline
                 if (window.adminModal && window.adminModal.prompt) {
                     window.adminModal.prompt('Please provide a reason for declining this donor\'s medical history:', {
                         title: 'Decline Reason Required',
@@ -8245,11 +8251,29 @@ function getCacheStats() {
         window.viewPhlebotomistDetails = function(donorId) {
             console.log('Viewing phlebotomist details for donor:', donorId);
             const eligibilityId = window.currentEligibilityId || 'pending_' + donorId;
-            // Use the comprehensive donor details modal
-            window.openDonorDetails({
-                donor_id: donorId,
-                eligibility_id: eligibilityId
-            });
+            // Use the comprehensive donor details modal with access check
+            if (typeof window.openDonorDetailsWithAccessCheck === 'function') {
+                window.openDonorDetailsWithAccessCheck(donorId, eligibilityId);
+            } else {
+                console.error('openDonorDetailsWithAccessCheck function not available');
+            }
+        };
+        
+        // Wrapper function for openDonorDetails that checks access before opening
+        window.openDonorDetails = function(options) {
+            if (!options || !options.donor_id) {
+                console.error('openDonorDetails: donor_id is required');
+                return;
+            }
+            const donorId = options.donor_id;
+            const eligibilityId = options.eligibility_id || 'pending_' + donorId;
+            
+            // Use the access-checked openDetails function
+            if (typeof window.openDonorDetailsWithAccessCheck === 'function') {
+                window.openDonorDetailsWithAccessCheck(donorId, eligibilityId);
+            } else {
+                console.error('openDonorDetailsWithAccessCheck function not available');
+            }
         };
         // Function to fetch and populate donor details modal with proper layout
         window.fetchDonorDetailsModal = function(donorId, eligibilityId) {

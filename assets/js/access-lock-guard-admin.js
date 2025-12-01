@@ -26,7 +26,7 @@
                                 This donor is currently being processed. Please try again later.
                             </p>
                         </div>
-                        <div class="modal-footer">
+                        <div class="modal-footer justify-content-end">
                             <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
                         </div>
                     </div>

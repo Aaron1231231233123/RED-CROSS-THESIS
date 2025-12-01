@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const hasAll = bodyWeightInput.value.trim() !== '' && specificGravityInput.value.trim() !== '' && !!bloodTypeSelect.value;
         if (!hasAll) return false;
 
-        const weightOk = weight >= 50;
+        const weightOk = weight >= 50 && weight <= 120;
         const gravityOk = isAdminSpecificGravityInRange(gravity);
         return weightOk && gravityOk;
     }
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const weight = parseFloat(bodyWeightInput.value);
             const gravity = parseFloat(specificGravityInput.value);
             
-            const hasWeightError = weight < 50 && weight > 0;
+            const hasWeightError = weight > 0 && (weight < 50 || weight > 120);
             const hasGravityError = gravity > 0 && !isAdminSpecificGravityInRange(gravity);
             
             // Debug logging
@@ -392,14 +392,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const weight = parseFloat(value);
         
-        if (weight < 50 && weight > 0) {
-            // Show warning alert
+        // Updated range: 50-120kg
+        // Red if: weight < 50 OR weight > 120
+        if (weight > 0 && (weight < 50 || weight > 120)) {
+            // Show warning alert - RED border
             alert.style.display = 'block';
+            alert.textContent = '⚠️ Body weight must be between 50-120 kg for donor safety.';
             input.style.borderColor = '#dc3545';
-        } else {
-            // Hide alert and reset border
+        } else if (weight >= 50 && weight <= 120) {
+            // Valid range - GREEN border
             alert.style.display = 'none';
-            input.style.borderColor = weight > 0 ? '#28a745' : '#e9ecef';
+            input.style.borderColor = '#28a745';
+        } else {
+            // Empty or zero - default border
+            alert.style.display = 'none';
+            input.style.borderColor = '#e9ecef';
         }
     }
 
@@ -449,7 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <p class="mb-3">The following screening measurements indicate potential safety concerns:</p>
                             
                             <ul class="list-unstyled">
-                                ${hasWeightError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Body Weight:</strong> Below minimum requirement (50 kg)</li>' : ''}
+                                ${hasWeightError ? '<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Body Weight:</strong> Outside acceptable range (50-120 kg)</li>' : ''}
                                 ${hasGravityError ? `<li><i class="fas fa-times-circle text-danger me-2"></i><strong>Specific Gravity:</strong> Outside acceptable range (${getAdminSpecificGravityRangeText()})</li>` : ''}
                             </ul>
                             
