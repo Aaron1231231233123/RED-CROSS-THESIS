@@ -113,139 +113,246 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
             <main class="col-12 px-md-4" style="flex: 1 1 auto; padding-left: 0; padding-right: 0;">
                 <div class="dashboard-home-main" style="margin-right: 0;">
                     <div class="content-wrapper">
-                    <div class="d-flex justify-content-between align-items-center mb-2" style="padding: 8px 4px;">
-                        <h2 class="mb-0" style="font-weight:700">Forecast Reports</h2>
-                        <button class="btn btn-outline-danger btn-sm" id="refreshReportsBtn" title="Refresh data from database">
-                            <i class="fas fa-sync-alt me-2"></i>Refresh Data
-                        </button>
-                    </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2" style="padding: 8px 4px;">
+                            <h2 class="mb-0" style="font-weight:700">Reports</h2>
+                            <div class="d-flex align-items-center gap-2">
+                                <button
+                                    class="btn btn-danger btn-sm"
+                                    id="generateReportsBtn"
+                                    type="button"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#generateReportsModal"
+                                    title="Generate a printable data report">
+                                    <i class="fas fa-file-pdf me-2"></i>Generate Reports
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" id="refreshReportsBtn" title="Refresh data from database">
+                                    <i class="fas fa-sync-alt me-2"></i>Refresh Data
+                                </button>
+                            </div>
+                        </div>
 
-                    <div class="row g-2 mb-2 align-items-stretch">
-                        <div class="col-md-2">
-                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label" style="font-size:0.85rem">Total Forecasted Demand</div>
-                                <div class="kpi-value" id="kpiDemand" style="font-size:32px">520</div>
-                            </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label" style="font-size:0.85rem">Total Forecasted Donations</div>
-                                <div class="kpi-value" id="kpiDonations" style="font-size:32px">460</div>
-                            </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label" style="font-size:0.85rem">Projected Balance</div>
-                                <div class="kpi-value" id="kpiBalance" style="font-size:32px">-60</div>
-                            </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label" style="font-size:0.85rem">Target Stock Level</div>
-                                <div class="kpi-value" id="kpiTargetStock" style="font-size:32px">-</div>
-                            </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label" style="font-size:0.85rem">Expiring Weekly</div>
-                                <div class="kpi-value" id="kpiExpiringWeekly" style="font-size:32px">-</div>
-                            </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
-                                <div class="kpi-label" style="font-size:0.85rem">Expiring Monthly</div>
-                                <div class="kpi-value" id="kpiExpiringMonthly" style="font-size:32px">-</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr class="my-2">
-
-                    <!-- Line Chart - Moved to top after KPI cards -->
-                    <div class="row g-3 mb-3">
-                        <div class="col-12">
-                            <div class="card chart-card p-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0"><span aria-hidden="true">🩸</span> 2025 Supply vs Demand &amp; 3-Month Forecast</h6>
-                                    <span class="text-muted small">Powered by Plotly</span>
+                        <!-- KPI Row -->
+                        <div class="row g-2 mb-2 align-items-stretch">
+                            <div class="col-md-2">
+                                <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                    <div class="kpi-label" style="font-size:0.85rem">Total Active Donors</div>
+                                    <div class="kpi-value" id="kpiActiveDonors" style="font-size:32px">-</div>
                                 </div>
-                                <iframe id="interactiveCombinedFrame" src="" width="100%" height="420" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
-                                <small class="text-muted">This interactive view refreshes whenever you click Refresh Data.</small>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                    <div class="kpi-label" style="font-size:0.85rem">Eligible Donors Today</div>
+                                    <div class="kpi-value" id="kpiEligibleToday" style="font-size:32px">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                    <div class="kpi-label" style="font-size:0.85rem">Total Blood Units Available</div>
+                                    <div class="kpi-value" id="kpiUnitsAvailable" style="font-size:32px">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                    <div class="kpi-label" style="font-size:0.85rem">Units Nearing Expiry (7 days)</div>
+                                    <div class="kpi-value" id="kpiUnitsNearingExpiry" style="font-size:32px">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                    <div class="kpi-label" style="font-size:0.85rem">Hospital Requests Today</div>
+                                    <div class="kpi-value" id="kpiHospitalRequestsToday" style="font-size:32px">-</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card kpi-card p-3" style="border:1px solid #eee; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.06)">
+                                    <div class="kpi-label" style="font-size:0.85rem">Total Forecasted Demand</div>
+                                    <div class="kpi-value" id="kpiForecastDemand" style="font-size:32px">-</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <hr class="my-2">
+                        <hr class="my-2">
 
-                    <div class="alert alert-light border mb-3" role="alert">
-                        Forecast data below refreshes directly from Supabase. Use the Refresh Data button whenever you need the latest numbers.
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="table align-middle" id="reportsTable">
-                            <thead>
-                                <tr>
-                                    <th>Month</th>
-                                    <th>Blood Type</th>
-                                    <th>Forecasted Demand</th>
-                                    <th>Forecasted Donations</th>
-                                    <th>Projected Balance</th>
-                                    <th>Status</th>
-                                    <th>Details</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                    <div class="text-muted mt-2 small">Showing latest forecast for every blood type.</div>
-
-                    <hr class="my-3">
-
-                    <!-- Two Charts - Bar and Pie -->
-                    <div class="row g-3 charts-row">
-                        <div class="col-lg-6 col-md-12">
-                            <div class="card chart-card p-3">
-                                <h6>Forecasted Blood Supply</h6>
-                                <img id="supplyChartImg" src="" alt="Supply Forecast Chart" class="img-fluid rounded mb-3 border">
-                                <h6 class="mt-2">Forecasted Hospital Demand</h6>
-                                <img id="demandChartImg" src="" alt="Demand Forecast Chart" class="img-fluid rounded border">
+                        <!-- Donor Demographic Overview -->
+                        <h5 class="mb-2" style="font-weight:600;">Donor Demographic Overview</h5>
+                        <div class="row g-3 charts-row mb-2">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donor Age Distribution</h6>
+                                    <iframe id="chartDonorAge" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donor Location Distribution</h6>
+                                    <iframe id="chartDonorLocation" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-lg-6 col-md-12">
-                            <div class="card chart-card p-3">
-                                <h6>Supply vs Demand Comparison</h6>
-                                <img id="comparisonChartImg" src="" alt="Supply vs Demand Chart" class="img-fluid rounded mb-3 border">
-                                <h6 class="mt-2">Projected Stock Buffer</h6>
-                                <img id="projectedChartImg" src="" alt="Projected Stock Chart" class="img-fluid rounded border">
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="row g-3 charts-row mt-1">
-                        <div class="col-lg-6 col-md-12">
-                            <div class="card chart-card p-3">
-                                <h6><span aria-hidden="true">🩸</span> 2025 Blood Supply &amp; 3-Month Forecast</h6>
-                                <iframe id="interactiveSupplyFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                        <div class="row g-3 charts-row mb-2">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donor Sex Distribution</h6>
+                                    <iframe id="chartDonorSex" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donor Eligibility Status</h6>
+                                    <iframe id="chartDonorEligibility" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-lg-6 col-md-12">
-                            <div class="card chart-card p-3">
-                                <h6><span aria-hidden="true">📊</span> 2025 Hospital Demand &amp; 3-Month Forecast</h6>
-                                <iframe id="interactiveDemandFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="card chart-card p-3 mt-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">Projected Stock Status</h6>
-                            <small class="text-muted">Target buffer: 10 units</small>
+                        <div class="row g-3 charts-row mb-3">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donor Blood Type Distribution</h6>
+                                    <iframe id="chartDonorBloodType" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donation Frequency</h6>
+                                    <iframe id="chartDonationFrequency" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
                         </div>
-                        <div id="projectedStockPanel" class="mt-3">
-                            <p class="text-muted mb-0">Loading projected stock levels...</p>
+
+                        <!-- Donation Activity Insight -->
+                        <h5 class="mb-2" style="font-weight:600;">Donation Activity Insight</h5>
+                        <div class="row g-3 charts-row mb-3">
+                            <div class="col-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Donations by Month</h6>
+                                    <iframe id="chartDonationsByMonth" src="" width="100%" height="340" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
                         </div>
-                        <iframe id="projectedStockFrame" src="" width="100%" height="520" frameborder="0" class="mt-3" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
-                    </div>
+
+                        <div class="row g-3 charts-row mb-3">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Mobile Drive vs In-House Donations</h6>
+                                    <iframe id="chartMobileVsInhouse" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Success vs Unsuccessful Donations</h6>
+                                    <iframe id="chartSuccessVsUnsuccessful" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Hospital Request Patterns -->
+                        <h5 class="mb-2" style="font-weight:600;">Hospital Request Patterns</h5>
+                        <div class="row g-3 charts-row mb-3">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Monthly Request Trend</h6>
+                                    <iframe id="chartMonthlyRequestsTrend" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Requests by Blood Type</h6>
+                                    <iframe id="chartRequestsByBloodType" src="" width="100%" height="320" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Blood Demand Forecasting (existing forecast section) -->
+                        <h5 class="mb-2" style="font-weight:600;">Blood Demand Forecasting</h5>
+
+                        <!-- Combined interactive line chart -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <div class="card chart-card p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 id="combinedChartTitle" class="mb-0"><span aria-hidden="true">🩸</span> Supply vs Demand &amp; 3-Month Forecast</h6>
+                                        <span class="text-muted small">Powered by Plotly</span>
+                                    </div>
+                                    <iframe id="interactiveCombinedFrame" src="" width="100%" height="420" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                    <small class="text-muted">This interactive view refreshes whenever you click Refresh Data.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-light border mb-3" role="alert">
+                            Forecast data below refreshes directly from Supabase. Use the Refresh Data button whenever you need the latest numbers.
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table align-middle" id="reportsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Month</th>
+                                        <th>Blood Type</th>
+                                        <th>Forecasted Demand</th>
+                                        <th>Forecasted Donations</th>
+                                        <th>Projected Balance</th>
+                                        <th>Status</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="text-muted mt-2 small">Showing latest forecast for every blood type.</div>
+
+                        <hr class="my-3">
+
+                        <!-- Static PNG charts -->
+                        <div class="row g-3 charts-row">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Forecasted Blood Supply</h6>
+                                    <img id="supplyChartImg" src="" alt="Supply Forecast Chart" class="img-fluid rounded mb-3 border">
+                                    <h6 class="mt-2">Forecasted Hospital Demand</h6>
+                                    <img id="demandChartImg" src="" alt="Demand Forecast Chart" class="img-fluid rounded border">
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <h6>Supply vs Demand Comparison</h6>
+                                    <img id="comparisonChartImg" src="" alt="Supply vs Demand Chart" class="img-fluid rounded mb-3 border">
+                                    <h6 class="mt-2">Projected Stock Buffer</h6>
+                                    <img id="projectedChartImg" src="" alt="Projected Stock Chart" class="img-fluid rounded border">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 charts-row mt-1">
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 id="supplyChartTitle" class="mb-0"><span aria-hidden="true">🩸</span> Blood Supply &amp; 3-Month Forecast</h6>
+                                    </div>
+                                    <iframe id="interactiveSupplyFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-12">
+                                <div class="card chart-card p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 id="demandChartTitle" class="mb-0"><span aria-hidden="true">📊</span> Hospital Demand &amp; 3-Month Forecast</h6>
+                                    </div>
+                                    <iframe id="interactiveDemandFrame" src="" width="100%" height="360" frameborder="0" style="border:1px solid #eee;border-radius:8px;background:#fff;"></iframe>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card chart-card p-3 mt-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">Projected Stock Status</h6>
+                                <small class="text-muted">Target buffer: 10 units</small>
+                            </div>
+                            <div id="projectedStockPanel" class="mt-3">
+                                <p class="text-muted mb-0">Loading projected stock levels...</p>
+                            </div>
+                            <!-- Removed duplicate projected stock chart iframe; summary above already covers this info -->
+                        </div>
                     </div>
                 </div>
             </main>
@@ -266,6 +373,7 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-danger" id="exportBtn">Export Details</button>
                 </div>
+            </div>
         </div>
     </div>
 
@@ -288,6 +396,39 @@ main.col-md-9.ms-sm-auto.col-lg-10.px-md-4{margin-left:240px !important;margin-t
     <script src="../../assets/js/admin-donor-registration-modal.js"></script>
     <script src="../../assets/js/admin-screening-form-modal.js"></script>
 
+    <!-- Generate Reports confirmation modal -->
+    <div class="modal fade" id="generateReportsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">Generate Data Report</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        This will open a new page and generate a detailed PDF data report
+                        using the latest donor, inventory, and hospital data.
+                    </p>
+                    <div class="mb-3">
+                        <label for="reportCoverageYear" class="form-label fw-semibold">Coverage Year</label>
+                        <select id="reportCoverageYear" class="form-select">
+                            <!-- Options populated by JavaScript -->
+                        </select>
+                        <div class="form-text">
+                            The report will cover the period Jan–Dec for the selected year.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmGenerateReportsBtn">
+                        <span class="default-label"><i class="fas fa-file-export me-2"></i>Generate</span>
+                        <span class="loading-label d-none"><i class="fas fa-spinner fa-spin me-2"></i>Generating…</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
-</html>
 </html>

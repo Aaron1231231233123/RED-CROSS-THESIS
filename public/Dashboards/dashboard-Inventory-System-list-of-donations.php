@@ -4610,7 +4610,14 @@ function getCacheStats() {
                     // Only show approve/decline buttons if initial screening is completed AND medical history is not approved
                     const needsApproval = hasScreeningRecord && medicalApproval.toLowerCase() !== 'approved';
                     const isAlreadyApproved = medicalApproval.toLowerCase() === 'approved';
-                    console.log(`📊 Medical Approval: ${medicalApproval}, Has Screening: ${hasScreeningRecord}, Needs Approval: ${needsApproval}, Already Approved: ${isAlreadyApproved}`);
+                    // Get donor gender for determining final step (5 for male, 6 for female)
+                    const donorSex = (donorData.donor || {}).sex || (donorData.donor_form || {}).sex || '';
+                    const isMale = donorSex && (donorSex.toLowerCase() === 'male' || donorSex.toLowerCase() === 'm');
+                    const finalStep = isMale ? 5 : 6;
+                    // Store for use in button creation
+                    window.currentAdminMHIsMale = isMale;
+                    window.currentAdminMHFinalStep = finalStep;
+                    console.log(`📊 Medical Approval: ${medicalApproval}, Has Screening: ${hasScreeningRecord}, Needs Approval: ${needsApproval}, Already Approved: ${isAlreadyApproved}, Gender: ${donorSex}, Is Male: ${isMale}, Final Step: ${finalStep}`);
                     // Load the admin medical history modal content
                     return fetch(`../../src/views/forms/medical-history-modal-content-admin.php?donor_id=${encodeURIComponent(donorId)}`)
                         .then(r => {
@@ -4655,32 +4662,84 @@ function getCacheStats() {
                                 const prevButton = document.getElementById('prevButton');
                                 if (needsApproval) {
                                     // For donors who need medical history approval - show approve/decline buttons
+                                    // Keep previous/next buttons visible
                                     if (nextButton) {
-                                        nextButton.style.display = 'none';
+                                        nextButton.style.display = 'inline-block';
+                                        nextButton.style.visibility = 'visible';
                                     }
                                     if (prevButton) {
-                                        prevButton.style.display = 'none';
+                                        prevButton.style.display = 'inline-block';
+                                        prevButton.style.visibility = 'visible';
                                     }
+                                    
+                                    // Get current step information
+                                    const form = document.getElementById('modalMedicalHistoryForm');
+                                    const totalSteps = form ? form.querySelectorAll('.form-step').length : 6;
+                                    const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
+                                    const isLastStep = currentStep === totalSteps;
+                                    
                                     // Add approve/decline buttons
                                     const modalFooter = document.querySelector('#medicalHistoryModalAdmin .modal-footer');
                                     if (modalFooter && !document.getElementById('approveMedicalHistoryBtn')) {
+                                        // Create approve button (only show on last step)
                                         const approveBtn = document.createElement('button');
                                         approveBtn.className = 'btn btn-success me-2';
                                         approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve Medical History';
                                         approveBtn.id = 'approveMedicalHistoryBtn';
+                                        approveBtn.style.display = isLastStep ? 'inline-block' : 'none';
+                                        approveBtn.style.visibility = isLastStep ? 'visible' : 'hidden';
+                                        
+                                        // Create decline button
                                         const declineBtn = document.createElement('button');
-                                        declineBtn.className = 'btn btn-danger';
-                                        declineBtn.innerHTML = '<i class="fas fa-ban me-2"></i>Decline Medical History';
+                                        declineBtn.className = 'btn btn-danger me-2';
+                                        declineBtn.innerHTML = '<i class="fas fa-times me-2"></i>Decline Medical History';
                                         declineBtn.id = 'declineMedicalHistoryBtn';
-                                        // Insert buttons before the close button
+                                        
+                                        // Find footer-right or create it
+                                        let footerRight = modalFooter.querySelector('.footer-right');
+                                        if (!footerRight) {
+                                            footerRight = document.createElement('div');
+                                            footerRight.className = 'footer-right';
+                                            footerRight.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+                                            modalFooter.appendChild(footerRight);
+                                        }
+                                        
+                                        // Position decline button between previous and next
+                                        if (prevButton && prevButton.parentNode) {
+                                            // If prev button is in footer-right, insert decline after it
+                                            if (prevButton.parentNode === footerRight || prevButton.parentNode.classList.contains('footer-right')) {
+                                                if (prevButton.nextSibling) {
+                                                    prevButton.parentNode.insertBefore(declineBtn, prevButton.nextSibling);
+                                                } else {
+                                                    prevButton.parentNode.appendChild(declineBtn);
+                                                }
+                                            } else {
+                                                // Move prev button to footer-right first
+                                                footerRight.appendChild(prevButton);
+                                                footerRight.appendChild(declineBtn);
+                                            }
+                                        } else if (nextButton && nextButton.parentNode) {
+                                            // If next button is in footer-right, insert decline before it
+                                            if (nextButton.parentNode === footerRight || nextButton.parentNode.classList.contains('footer-right')) {
+                                                nextButton.parentNode.insertBefore(declineBtn, nextButton);
+                                            } else {
+                                                // Move next button to footer-right first
+                                                footerRight.appendChild(declineBtn);
+                                                footerRight.appendChild(nextButton);
+                                            }
+                                        } else {
+                                            // Just append to footer-right
+                                            footerRight.appendChild(declineBtn);
+                                        }
+                                        
+                                        // Insert approve button before close button (only visible on last step)
                                         const closeBtn = modalFooter.querySelector('button[data-bs-dismiss="modal"]');
                                         if (closeBtn) {
                                             modalFooter.insertBefore(approveBtn, closeBtn);
-                                            modalFooter.insertBefore(declineBtn, closeBtn);
                                         } else {
                                             modalFooter.appendChild(approveBtn);
-                                            modalFooter.appendChild(declineBtn);
                                         }
+                                        
                                         // Bind event handlers
                                         approveBtn.addEventListener('click', function() {
                                             handleMedicalHistoryApproval(donorId, 'approve');
@@ -5241,7 +5300,14 @@ function getCacheStats() {
                     // Only show approve/decline buttons if initial screening is completed AND medical history is not approved
                     const needsApproval = hasScreeningRecord && medicalApproval.toLowerCase() !== 'approved';
                     const isAlreadyApproved = medicalApproval.toLowerCase() === 'approved';
-                    console.log(`📊 Medical Approval: ${medicalApproval}, Has Screening: ${hasScreeningRecord}, Needs Approval: ${needsApproval}, Already Approved: ${isAlreadyApproved}`);
+                    // Get donor gender for determining final step (5 for male, 6 for female)
+                    const donorSex = (donorData.donor || {}).sex || (donorData.donor_form || {}).sex || '';
+                    const isMale = donorSex && (donorSex.toLowerCase() === 'male' || donorSex.toLowerCase() === 'm');
+                    const finalStep = isMale ? 5 : 6;
+                    // Store for use in button creation
+                    window.currentAdminMHIsMale = isMale;
+                    window.currentAdminMHFinalStep = finalStep;
+                    console.log(`📊 Medical Approval: ${medicalApproval}, Has Screening: ${hasScreeningRecord}, Needs Approval: ${needsApproval}, Already Approved: ${isAlreadyApproved}, Gender: ${donorSex}, Is Male: ${isMale}, Final Step: ${finalStep}`);
                     // Load the medical history modal
                     return fetch(`../../src/views/forms/medical-history-modal.php?donor_id=${encodeURIComponent(donorId)}`)
                         .then(r => {
@@ -5286,32 +5352,89 @@ function getCacheStats() {
                                 const prevButton = document.getElementById('prevButton');
                                 if (needsApproval) {
                                     // For donors who need medical history approval - show approve/decline buttons
+                                    // Keep previous/next buttons visible
                                     if (nextButton) {
-                                        nextButton.style.display = 'none';
+                                        nextButton.style.display = 'inline-block';
+                                        nextButton.style.visibility = 'visible';
                                     }
                                     if (prevButton) {
-                                        prevButton.style.display = 'none';
+                                        prevButton.style.display = 'inline-block';
+                                        prevButton.style.visibility = 'visible';
                                     }
+                                    
+                                    // Get current step information and determine final step based on gender
+                                    const form = document.getElementById('modalMedicalHistoryForm');
+                                    const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
+                                    // Get gender from stored window variable
+                                    const isMale = window.currentAdminMHIsMale !== undefined ? window.currentAdminMHIsMale : 
+                                                  (window.currentAdminMHFinalStep === 5);
+                                    const finalStep = window.currentAdminMHFinalStep || (isMale ? 5 : 6);
+                                    const isFinalStep = currentStep === finalStep;
+                                    
+                                    console.log('Admin MH (2) - Current step:', currentStep, 'Final step (gender-based):', finalStep, 'Is male:', isMale, 'Is final step:', isFinalStep);
+                                    
                                     // Add approve/decline buttons
                                     const modalFooter = document.querySelector('#medicalHistoryModalAdmin .modal-footer');
                                     if (modalFooter && !document.getElementById('approveMedicalHistoryBtn')) {
+                                        // Create approve button (only show on final step: 5 for male, 6 for female)
                                         const approveBtn = document.createElement('button');
                                         approveBtn.className = 'btn btn-success me-2';
                                         approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve Medical History';
                                         approveBtn.id = 'approveMedicalHistoryBtn';
+                                        approveBtn.style.display = isFinalStep ? 'inline-block' : 'none';
+                                        approveBtn.style.visibility = isFinalStep ? 'visible' : 'hidden';
+                                        
+                                        // Create decline button
                                         const declineBtn = document.createElement('button');
-                                        declineBtn.className = 'btn btn-danger';
-                                        declineBtn.innerHTML = '<i class="fas fa-ban me-2"></i>Decline Medical History';
+                                        declineBtn.className = 'btn btn-danger me-2';
+                                        declineBtn.innerHTML = '<i class="fas fa-times me-2"></i>Decline Medical History';
                                         declineBtn.id = 'declineMedicalHistoryBtn';
-                                        // Insert buttons before the close button
+                                        
+                                        // Find footer-right or create it
+                                        let footerRight = modalFooter.querySelector('.footer-right');
+                                        if (!footerRight) {
+                                            footerRight = document.createElement('div');
+                                            footerRight.className = 'footer-right';
+                                            footerRight.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+                                            modalFooter.appendChild(footerRight);
+                                        }
+                                        
+                                        // Position decline button between previous and next
+                                        if (prevButton && prevButton.parentNode) {
+                                            // If prev button is in footer-right, insert decline after it
+                                            if (prevButton.parentNode === footerRight || prevButton.parentNode.classList.contains('footer-right')) {
+                                                if (prevButton.nextSibling) {
+                                                    prevButton.parentNode.insertBefore(declineBtn, prevButton.nextSibling);
+                                                } else {
+                                                    prevButton.parentNode.appendChild(declineBtn);
+                                                }
+                                            } else {
+                                                // Move prev button to footer-right first
+                                                footerRight.appendChild(prevButton);
+                                                footerRight.appendChild(declineBtn);
+                                            }
+                                        } else if (nextButton && nextButton.parentNode) {
+                                            // If next button is in footer-right, insert decline before it
+                                            if (nextButton.parentNode === footerRight || nextButton.parentNode.classList.contains('footer-right')) {
+                                                nextButton.parentNode.insertBefore(declineBtn, nextButton);
+                                            } else {
+                                                // Move next button to footer-right first
+                                                footerRight.appendChild(declineBtn);
+                                                footerRight.appendChild(nextButton);
+                                            }
+                                        } else {
+                                            // Just append to footer-right
+                                            footerRight.appendChild(declineBtn);
+                                        }
+                                        
+                                        // Insert approve button before close button (only visible on final step)
                                         const closeBtn = modalFooter.querySelector('button[data-bs-dismiss="modal"]');
                                         if (closeBtn) {
                                             modalFooter.insertBefore(approveBtn, closeBtn);
-                                            modalFooter.insertBefore(declineBtn, closeBtn);
                                         } else {
                                             modalFooter.appendChild(approveBtn);
-                                            modalFooter.appendChild(declineBtn);
                                         }
+                                        
                                         // Bind event handlers
                                         approveBtn.addEventListener('click', function() {
                                             handleMedicalHistoryApproval(donorId, 'approve');
@@ -5560,6 +5683,11 @@ function getCacheStats() {
                     window.currentViewMHScreeningRecord = hasScreeningRecord;
                     window.currentViewMHApproved = isApproved;
                     window.currentViewMHCompleted = isCompleted;
+                    // Store donor gender for determining final step (5 for male, 6 for female)
+                    const donorSex = (donorData.donor || {}).sex || (donorData.donor_form || {}).sex || '';
+                    const isMale = donorSex && (donorSex.toLowerCase() === 'male' || donorSex.toLowerCase() === 'm');
+                    window.currentViewMHIsMale = isMale;
+                    window.currentViewMHFinalStep = isMale ? 5 : 6;
                     
                     // For examination status (has screening but not approved), use view_only=0 to show full form
                     // This allows navigation buttons and approve/decline buttons to work
@@ -5831,14 +5959,32 @@ function getCacheStats() {
                                         console.log('Modal footer innerHTML length:', modalFooter.innerHTML.length);
                                         console.log('Modal footer innerHTML preview:', modalFooter.innerHTML.substring(0, 300));
                                         
-                                        // Step 5: Find or create footer-left
+                                        // Step 5: Find footer-right (where previous/next buttons are) and footer-left
                                         let footerLeft = modalFooter.querySelector('.footer-left');
-                                        const footerRight = modalFooter.querySelector('.footer-right');
+                                        let footerRight = modalFooter.querySelector('.footer-right');
                                         
                                         console.log('Footer-left found:', !!footerLeft);
                                         console.log('Footer-right found:', !!footerRight);
                                         
-                                        // If footer-left doesn't exist, create it
+                                        // Find previous and next buttons
+                                        const prevButton = document.getElementById('modalPrevButton');
+                                        const nextButton = document.getElementById('modalNextButton');
+                                        console.log('Previous button found:', !!prevButton);
+                                        console.log('Next button found:', !!nextButton);
+                                        
+                                        // Ensure footer-right exists (where prev/next buttons should be)
+                                        if (!footerRight) {
+                                            console.log('⚠️ Footer-right not found, creating it...');
+                                            footerRight = document.createElement('div');
+                                            footerRight.className = 'footer-right';
+                                            footerRight.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+                                            
+                                            // Insert at the end of modal-footer
+                                            modalFooter.appendChild(footerRight);
+                                            console.log('✅ Created footer-right div');
+                                        }
+                                        
+                                        // If footer-left doesn't exist, create it (for approve button on last step)
                                         if (!footerLeft) {
                                             console.log('⚠️ Footer-left not found, creating it...');
                                             footerLeft = document.createElement('div');
@@ -5852,13 +5998,6 @@ function getCacheStats() {
                                                 modalFooter.appendChild(footerLeft);
                                             }
                                             console.log('✅ Created footer-left div');
-                                            console.log('Footer-left parent:', footerLeft.parentNode);
-                                            console.log('Footer-left in DOM:', document.body.contains(footerLeft));
-                                        }
-                                        
-                                        if (!footerLeft) {
-                                            console.error('❌ Could not create footer-left div');
-                                            return false;
                                         }
                                         
                                         // Step 6: Remove any existing buttons
@@ -5875,34 +6014,89 @@ function getCacheStats() {
                                             existingDecline.remove();
                                         }
                                         
-                                        // Step 7: Create new buttons with full styling
+                                        // Step 7: Get current step information and determine final step based on gender
+                                        const form = document.getElementById('modalMedicalHistoryForm');
+                                        const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
+                                        // Get gender from stored window variable or determine from form
+                                        const isMale = window.currentViewMHIsMale !== undefined ? window.currentViewMHIsMale : 
+                                                      (window.currentViewMHFinalStep === 5);
+                                        const finalStep = window.currentViewMHFinalStep || (isMale ? 5 : 6);
+                                        const isFinalStep = currentStep === finalStep;
+                                        
+                                        console.log('Current step:', currentStep, 'Final step (gender-based):', finalStep, 'Is male:', isMale, 'Is final step:', isFinalStep);
+                                        
+                                        // Step 8: Create approve button (only show on final step: 5 for male, 6 for female)
                                         const approveBtn = document.createElement('button');
                                         approveBtn.type = 'button';
                                         approveBtn.className = 'btn btn-success me-2';
                                         approveBtn.innerHTML = '<i class="fas fa-check me-2"></i>Approve Medical History';
                                         approveBtn.id = 'viewMHApproveBtn';
-                                        // Use inline styles with !important to override any CSS
-                                        approveBtn.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important;');
+                                        approveBtn.setAttribute('style', 'display: ' + (isFinalStep ? 'inline-block' : 'none') + ' !important; visibility: ' + (isFinalStep ? 'visible' : 'hidden') + ' !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important;');
                                         
+                                        // Step 9: Create decline button (always show, positioned between prev and next)
                                         const declineBtn = document.createElement('button');
                                         declineBtn.type = 'button';
                                         declineBtn.className = 'btn btn-danger me-2';
                                         declineBtn.innerHTML = '<i class="fas fa-times me-2"></i>Decline Medical History';
                                         declineBtn.id = 'viewMHDeclineBtn';
-                                        // Use inline styles with !important to override any CSS
                                         declineBtn.setAttribute('style', 'display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: auto !important; height: auto !important; padding: 0.375rem 0.75rem !important;');
                                         
-                                        // Step 8: Ensure footer-left is visible and has proper layout
-                                        const footerLeftComputed = window.getComputedStyle(footerLeft);
-                                        if (footerLeftComputed.display === 'none' || footerLeft.offsetWidth === 0) {
-                                            footerLeft.setAttribute('style', 'flex: 1; display: flex !important; gap: 10px; align-items: center; visibility: visible !important;');
-                                            console.log('✅ Fixed footer-left visibility');
+                                        // Step 10: Position decline button between previous and next in footer-right
+                                        if (footerRight) {
+                                            // Ensure footer-right is visible
+                                            const footerRightComputed = window.getComputedStyle(footerRight);
+                                            if (footerRightComputed.display === 'none' || footerRight.offsetWidth === 0) {
+                                                footerRight.setAttribute('style', 'display: flex !important; gap: 10px; align-items: center; visibility: visible !important;');
+                                                console.log('✅ Fixed footer-right visibility');
+                                            }
+                                            
+                                            // If previous button exists, insert decline after it
+                                            if (prevButton && prevButton.parentNode === footerRight) {
+                                                // Insert decline after previous button
+                                                if (prevButton.nextSibling) {
+                                                    footerRight.insertBefore(declineBtn, prevButton.nextSibling);
+                                                } else {
+                                                    footerRight.appendChild(declineBtn);
+                                                }
+                                                console.log('✅ Inserted decline button after previous button');
+                                            } else if (nextButton && nextButton.parentNode === footerRight) {
+                                                // If next button exists, insert decline before it
+                                                footerRight.insertBefore(declineBtn, nextButton);
+                                                console.log('✅ Inserted decline button before next button');
+                                            } else {
+                                                // If neither prev nor next is in footer-right, just append
+                                                footerRight.appendChild(declineBtn);
+                                                console.log('✅ Appended decline button to footer-right');
+                                            }
+                                        } else {
+                                            console.error('❌ Footer-right not found, cannot position decline button');
+                                            return false;
                                         }
                                         
-                                        // Step 9: Insert buttons into footer-left
-                                        footerLeft.appendChild(approveBtn);
-                                        footerLeft.appendChild(declineBtn);
-                                        console.log('✅ Inserted buttons into footer-left');
+                                        // Step 11: Insert approve button into footer-left (only visible on last step)
+                                        if (footerLeft) {
+                                            // Ensure footer-left is visible
+                                            const footerLeftComputed = window.getComputedStyle(footerLeft);
+                                            if (footerLeftComputed.display === 'none' || footerLeft.offsetWidth === 0) {
+                                                footerLeft.setAttribute('style', 'flex: 1; display: flex !important; gap: 10px; align-items: center; visibility: visible !important;');
+                                                console.log('✅ Fixed footer-left visibility');
+                                            }
+                                            
+                                            footerLeft.appendChild(approveBtn);
+                                            console.log('✅ Inserted approve button into footer-left (visible only on last step)');
+                                        }
+                                        
+                                        // Step 12: Ensure previous and next buttons remain visible
+                                        if (prevButton) {
+                                            prevButton.style.display = 'inline-block';
+                                            prevButton.style.visibility = 'visible';
+                                            console.log('✅ Ensured previous button is visible');
+                                        }
+                                        if (nextButton) {
+                                            nextButton.style.display = 'inline-block';
+                                            nextButton.style.visibility = 'visible';
+                                            console.log('✅ Ensured next button is visible');
+                                        }
                                         
                                         // Step 10: Force a reflow to ensure buttons render
                                         void footerLeft.offsetHeight;
@@ -6025,16 +6219,15 @@ function getCacheStats() {
                                                     if (nextBtn) {
                                                         // Always keep as "Next" button, not "Submit" when approve/decline should show
                                                         const currentStep = document.querySelector('.form-step.active');
-                                                        const totalSteps = document.querySelectorAll('.form-step').length;
-                                                        const isLastStep = currentStep && parseInt(currentStep.getAttribute('data-step')) === totalSteps;
+                                                        const currentStepNum = currentStep ? parseInt(currentStep.getAttribute('data-step')) : 1;
+                                                        // Get gender-based final step (5 for male, 6 for female)
+                                                        const isMale = window.currentViewMHIsMale !== undefined ? window.currentViewMHIsMale : 
+                                                                      (window.currentViewMHFinalStep === 5);
+                                                        const finalStep = window.currentViewMHFinalStep || (isMale ? 5 : 6);
+                                                        const isFinalStep = currentStepNum === finalStep;
                                                         
-                                                        if (isLastStep) {
-                                                            // On last step, keep as "Next" (not "Submit") since we have approve/decline buttons
-                                                            nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
-                                                        } else {
-                                                            // On other steps, keep as "Next"
-                                                            nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
-                                                        }
+                                                        // Always keep as "Next" button
+                                                        nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right ms-1"></i>';
                                                         nextBtn.style.display = 'inline-block';
                                                         nextBtn.style.visibility = 'visible';
                                                     }
@@ -6050,16 +6243,27 @@ function getCacheStats() {
                                                         submitBtn.style.visibility = 'hidden';
                                                     }
                                                     
-                                                    // Ensure approve/decline buttons are visible
-                                                    const approveBtn = document.getElementById('viewMHApproveBtn');
+                                                    // Ensure decline button is always visible
                                                     const declineBtn = document.getElementById('viewMHDeclineBtn');
-                                                    if (approveBtn) {
-                                                        approveBtn.style.display = 'inline-block';
-                                                        approveBtn.style.visibility = 'visible';
-                                                    }
                                                     if (declineBtn) {
                                                         declineBtn.style.display = 'inline-block';
                                                         declineBtn.style.visibility = 'visible';
+                                                    }
+                                                    
+                                                    // Approve button only shows on final step (5 for male, 6 for female)
+                                                    const approveBtn = document.getElementById('viewMHApproveBtn');
+                                                    if (approveBtn) {
+                                                        const isMale = window.currentViewMHIsMale !== undefined ? window.currentViewMHIsMale : 
+                                                                      (window.currentViewMHFinalStep === 5);
+                                                        const finalStep = window.currentViewMHFinalStep || (isMale ? 5 : 6);
+                                                        const isFinalStep = currentStepNum === finalStep;
+                                                        if (isFinalStep) {
+                                                            approveBtn.style.display = 'inline-block';
+                                                            approveBtn.style.visibility = 'visible';
+                                                        } else {
+                                                            approveBtn.style.display = 'none';
+                                                            approveBtn.style.visibility = 'hidden';
+                                                        }
                                                     }
                                                 };
                                                 console.log('✅ Overrode updateStepDisplay to keep next button and show approve/decline');
@@ -6083,15 +6287,32 @@ function getCacheStats() {
                                             
                                             // Buttons are now created by ensureApproveDeclineButtons function above
                                             // Just ensure they're visible if they exist
+                                            const form = document.getElementById('modalMedicalHistoryForm');
+                                            const currentStep = form ? parseInt(form.querySelector('.form-step.active')?.getAttribute('data-step') || '1') : 1;
+                                            // Get gender-based final step (5 for male, 6 for female)
+                                            const isMale = window.currentViewMHIsMale !== undefined ? window.currentViewMHIsMale : 
+                                                          (window.currentViewMHFinalStep === 5);
+                                            const finalStep = window.currentViewMHFinalStep || (isMale ? 5 : 6);
+                                            const isFinalStep = currentStep === finalStep;
+                                            
                                             const approveBtn = document.getElementById('viewMHApproveBtn');
                                             const declineBtn = document.getElementById('viewMHDeclineBtn');
-                                            if (approveBtn) {
-                                                approveBtn.style.display = 'inline-block';
-                                                approveBtn.style.visibility = 'visible';
-                                            }
+                                            
+                                            // Decline button always visible
                                             if (declineBtn) {
                                                 declineBtn.style.display = 'inline-block';
                                                 declineBtn.style.visibility = 'visible';
+                                            }
+                                            
+                                            // Approve button only on final step (5 for male, 6 for female)
+                                            if (approveBtn) {
+                                                if (isFinalStep) {
+                                                    approveBtn.style.display = 'inline-block';
+                                                    approveBtn.style.visibility = 'visible';
+                                                } else {
+                                                    approveBtn.style.display = 'none';
+                                                    approveBtn.style.visibility = 'hidden';
+                                                }
                                             }
                                         }
                                     }, 500); // Increased delay to ensure form is fully loaded

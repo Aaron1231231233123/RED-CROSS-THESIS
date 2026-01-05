@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from forecast_functions import forecast_supply, forecast_demand
+from forecast_functions import _forecast_next_value
 from forecast_workflow import run_forecast_workflow
 
 FORECAST_HORIZON = 3
@@ -53,23 +53,31 @@ def _generate_forecast_trace(sub_df: pd.DataFrame, value_col: str, filter_year: 
         empty_fc = pd.DataFrame(columns=["month", "forecast"])
         return actual, empty_fc
 
-    # Use ALL historical data for forecasting (not filtered by year)
-    # This ensures accurate forecasts using complete history
-    records = [
-        {"month": row["month"], "blood_type": row["blood_type"], value_col: row["value"]}
-        for _, row in sub_df.iterrows()
-    ]
-    forecast_df = forecast_supply(records) if value_col == "units_collected" else forecast_demand(records)
-    if not forecast_df:
-        # If forecast fails, return data (filtered by year if specified)
+    # Use ALL historical data (not filtered by year) to generate a true multi-step forecast.
+    # We recursively call the same ARIMA-based helper used elsewhere (`_forecast_next_value`)
+    # so each step is based on all past data plus previously forecast values.
+    history = sub_df["value"].tolist()
+    if not history:
+        # No data at all; nothing to forecast
         if filter_year:
             return sub_df[sub_df["month"].dt.year == filter_year].copy(), pd.DataFrame()
         return sub_df.copy(), pd.DataFrame()
 
+    forecast_values: List[float] = []
+    rolling_history = list(history)
+    for _ in range(FORECAST_HORIZON):
+        result = _forecast_next_value(rolling_history)
+        if result is None:
+            # Fallback: repeat last known value
+            next_val = float(rolling_history[-1])
+        else:
+            next_val = float(result.forecast_value)
+        forecast_values.append(next_val)
+        rolling_history.append(next_val)
+
     last_month = sub_df["month"].max()
-    forecast_values = [row["Forecast_Supply" if value_col == "units_collected" else "Forecast_Demand"] for row in forecast_df]
-    forecast_months = _next_month_sequence(last_month, min(len(forecast_values), FORECAST_HORIZON))
-    fc_df = pd.DataFrame({"month": forecast_months, "forecast": forecast_values[: len(forecast_months)]})
+    forecast_months = _next_month_sequence(last_month, FORECAST_HORIZON)
+    fc_df = pd.DataFrame({"month": forecast_months, "forecast": forecast_values})
 
     # Return historical data - filter by year if specified
     # Only show data within the selected year (not extending to next year)
