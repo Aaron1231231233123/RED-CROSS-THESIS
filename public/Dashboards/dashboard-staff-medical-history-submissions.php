@@ -7201,6 +7201,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'search') {
     // Credentials are displayed there for context during registration
     ?>
 <?php if ($is_reviewer): ?>
+<script src="../../assets/js/duplicate_donor_check_admin.js" defer></script>
 <script src="../../assets/js/admin-donor-registration-modal.js"></script>
 <?php endif; ?>
     <script>

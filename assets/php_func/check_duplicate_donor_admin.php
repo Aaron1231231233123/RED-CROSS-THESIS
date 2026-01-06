@@ -1,7 +1,8 @@
 <?php
 // check_duplicate_donor_admin.php
-// API endpoint to check for duplicate donors based on personal information (Admin-specific version)
-// This is a copy of check_duplicate_donor.php with admin-specific naming to avoid conflicts
+// API endpoint to check for duplicate donors based on personal information
+// Supports both Admin (role_id 1) and Staff/Reviewer (role_id 3) users
+// Admin-specific version with admin-specific naming to avoid conflicts with staff side
 
 // Enable error reporting for debugging (but don't display errors to avoid JSON corruption)
 error_reporting(E_ALL);
@@ -70,7 +71,8 @@ try {
         curl_setopt_array($curl, [
             CURLOPT_URL => $email_check_url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 10,
+            CURLOPT_TIMEOUT => 5, // Reduced to 5 seconds for faster response
+            CURLOPT_CONNECTTIMEOUT => 3, // 3 second connection timeout
             CURLOPT_HTTPHEADER => [
                 "apikey: " . SUPABASE_API_KEY,
                 "Authorization: Bearer " . SUPABASE_API_KEY,
@@ -163,7 +165,8 @@ try {
     curl_setopt_array($curl, [
         CURLOPT_URL => $donors_url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 10,
+        CURLOPT_TIMEOUT => 5, // Reduced to 5 seconds for faster response
+        CURLOPT_CONNECTTIMEOUT => 3, // 3 second connection timeout
         CURLOPT_HTTPHEADER => [
             "apikey: " . SUPABASE_API_KEY,
             "Authorization: Bearer " . SUPABASE_API_KEY,
@@ -256,7 +259,8 @@ try {
         curl_setopt_array($curl, [
             CURLOPT_URL => $all_eligibility_url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 10,
+            CURLOPT_TIMEOUT => 5, // Reduced for faster response
+            CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_HTTPHEADER => [
                 "apikey: " . SUPABASE_API_KEY,
                 "Authorization: Bearer " . SUPABASE_API_KEY,
@@ -416,7 +420,8 @@ try {
             curl_setopt_array($curl, [
                 CURLOPT_URL => $physical_exam_url,
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 5,
+                CURLOPT_TIMEOUT => 3, // Reduced for faster response
+                CURLOPT_CONNECTTIMEOUT => 2,
                 CURLOPT_HTTPHEADER => [
                     "apikey: " . SUPABASE_API_KEY,
                     "Authorization: Bearer " . SUPABASE_API_KEY,
@@ -442,7 +447,8 @@ try {
                     curl_setopt_array($curl, [
                         CURLOPT_URL => $blood_collection_url,
                         CURLOPT_RETURNTRANSFER => true,
-                        CURLOPT_TIMEOUT => 5,
+                        CURLOPT_TIMEOUT => 3, // Reduced for faster response
+                        CURLOPT_CONNECTTIMEOUT => 2,
                         CURLOPT_HTTPHEADER => [
                             "apikey: " . SUPABASE_API_KEY,
                             "Authorization: Bearer " . SUPABASE_API_KEY,

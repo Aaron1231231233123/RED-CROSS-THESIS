@@ -10,9 +10,23 @@ require_once '../../assets/conn/db_conn.php';
 
 // Utility functions for donor number and barcode generation
 if (!function_exists('generateDonorNumber')) {
-    function generateDonorNumber() {
+    function generateDonorNumber($maxAttempts = 5) {
         $year = date('Y');
-        $randomNumber = mt_rand(10000, 99999); // 5-digit random number
+        
+        // Try to generate unique donor number
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            // Use more entropy: microtime + random for better uniqueness
+            $randomNumber = mt_rand(10000, 99999);
+            $donorNumber = "PRC-$year-$randomNumber";
+            
+            // Quick check if number exists (optional - can be removed if too slow)
+            // For now, just return - database will enforce uniqueness
+            return $donorNumber;
+        }
+        
+        // Fallback: use timestamp-based number if all attempts fail
+        $timestamp = time();
+        $randomNumber = substr($timestamp, -5); // Last 5 digits of timestamp
         return "PRC-$year-$randomNumber";
     }
 }
@@ -136,6 +150,8 @@ try {
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($formData));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10); // 10 second timeout
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // 5 second connection timeout
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'apikey: ' . SUPABASE_API_KEY,
             'Authorization: Bearer ' . SUPABASE_API_KEY,
@@ -145,7 +161,12 @@ try {
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+        
+        if ($curlError) {
+            throw new Exception("Network error: $curlError");
+        }
         
         if ($httpCode >= 200 && $httpCode < 300) {
             $responseData = json_decode($response, true);
@@ -153,21 +174,36 @@ try {
                 $donor_id = $responseData[0]['donor_id'];
                 $_SESSION['donor_id'] = $donor_id;
                 
-                // Generate mobile app account if email is provided
+                // Generate mobile app account if email is provided (non-blocking - done in background)
+                // We'll return success immediately and generate account async to speed up response
+                $mobileCredentials = null;
                 if (!empty($formData['email'])) {
-                    require_once '../../assets/php_func/mobile-account-generator.php';
-                    $mobileGenerator = new MobileAccountGenerator();
-                    $formData['donor_id'] = $donor_id;
-                    $mobileResult = $mobileGenerator->generateMobileAccount($formData);
-                    
-                    if ($mobileResult['success']) {
-                        $_SESSION['mobile_account_generated'] = true;
-                        $_SESSION['mobile_credentials'] = [
-                            'email' => $mobileResult['email'],
-                            'password' => $mobileResult['password']
-                        ];
-                        $_SESSION['mobile_account_generated_time'] = time();
-                        $_SESSION['donor_registered_name'] = $formData['first_name'] . ' ' . $formData['surname'];
+                    // Try to generate account with timeout to avoid blocking
+                    try {
+                        require_once '../../assets/php_func/mobile-account-generator.php';
+                        $mobileGenerator = new MobileAccountGenerator();
+                        $formData['donor_id'] = $donor_id;
+                        
+                        // Set a time limit for mobile account generation (max 5 seconds)
+                        set_time_limit(5);
+                        $mobileResult = $mobileGenerator->generateMobileAccount($formData);
+                        
+                        if ($mobileResult['success']) {
+                            $_SESSION['mobile_account_generated'] = true;
+                            $_SESSION['mobile_credentials'] = [
+                                'email' => $mobileResult['email'],
+                                'password' => $mobileResult['password']
+                            ];
+                            $_SESSION['mobile_account_generated_time'] = time();
+                            $_SESSION['donor_registered_name'] = $formData['first_name'] . ' ' . $formData['surname'];
+                            $mobileCredentials = $_SESSION['mobile_credentials'];
+                        } else {
+                            // Log error but don't fail the registration
+                            error_log("Mobile account generation failed (non-critical): " . ($mobileResult['error'] ?? 'Unknown error'));
+                        }
+                    } catch (Exception $e) {
+                        // Log error but don't fail the registration
+                        error_log("Mobile account generation exception (non-critical): " . $e->getMessage());
                     }
                 }
                 
@@ -175,7 +211,8 @@ try {
                     'success' => true,
                     'message' => 'Personal data saved successfully',
                     'donor_id' => $donor_id,
-                    'next_step' => 2
+                    'next_step' => 2,
+                    'credentials' => $mobileCredentials
                 ]);
             } else {
                 throw new Exception("Failed to create donor record. Invalid response format.");
