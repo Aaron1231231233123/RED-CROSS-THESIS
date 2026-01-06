@@ -435,9 +435,10 @@
         }
     }
 
-    async function loadOverviewData() {
+    async function loadOverviewData(force = false) {
         try {
-            const url = `${OVERVIEW_API_URL}?ts=${Date.now()}`;
+            const ts = Date.now();
+            const url = `${OVERVIEW_API_URL}?ts=${ts}${force ? `&refresh=${ts}` : ''}`;
             const response = await fetch(url, { cache: 'no-cache' });
 
             // Read raw text first so we can log any PHP warnings/HTML that break JSON
@@ -549,7 +550,7 @@
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             loadData(true);
-            loadOverviewData();
+            loadOverviewData(true);
         });
     }
 

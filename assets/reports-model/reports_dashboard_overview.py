@@ -105,7 +105,9 @@ def _classify_unit_status(unit: Dict[str, Any]) -> str:
     return "Valid"
 
 
-def _aggregate_units_collected_by_status() -> Dict[str, Any]:
+def _aggregate_units_collected_by_status(
+    blood_units: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     """
     Build a month-level summary of units collected and their status breakdown
     from blood_bank_units:
@@ -114,7 +116,9 @@ def _aggregate_units_collected_by_status() -> Dict[str, Any]:
     """
     from datetime import datetime as _dt
 
-    blood_units = _fetch_blood_units()
+    # Allow caller to pass in pre-fetched blood_units to avoid repeated DB hits
+    if blood_units is None:
+        blood_units = _fetch_blood_units()
 
     by_month: Dict[str, Dict[str, int]] = {}
 
@@ -165,7 +169,9 @@ def _aggregate_units_collected_by_status() -> Dict[str, Any]:
     return {"success": True, "data": rows}
 
 
-def _aggregate_units_allocated() -> Dict[str, Any]:
+def _aggregate_units_allocated(
+    blood_units: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     """
     Units allocated to hospitals from blood_bank_units:
       - unit_serial_number
@@ -174,7 +180,7 @@ def _aggregate_units_allocated() -> Dict[str, Any]:
       - handed_over_at (date part)
     Grouped per year of handed_over_at.
     """
-    units = _fetch_blood_units()
+    units = blood_units if blood_units is not None else _fetch_blood_units()
     per_year: Dict[str, List[Dict[str, Any]]] = {}
 
     for unit in units:
@@ -209,7 +215,9 @@ def _aggregate_units_allocated() -> Dict[str, Any]:
     return {"success": True, "per_year": per_year}
 
 
-def _aggregate_units_expired() -> Dict[str, Any]:
+def _aggregate_units_expired(
+    blood_units: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     """
     Units expired (disposed) from blood_bank_units:
       - use _classify_unit_status == "Disposed"
@@ -217,7 +225,7 @@ def _aggregate_units_expired() -> Dict[str, Any]:
       - expires_at (date)
     Grouped per year of expires_at.
     """
-    units = _fetch_blood_units()
+    units = blood_units if blood_units is not None else _fetch_blood_units()
     per_year: Dict[str, List[Dict[str, Any]]] = {}
 
     for unit in units:
@@ -265,14 +273,16 @@ def _aggregate_units_expired() -> Dict[str, Any]:
     return {"success": True, "per_year": per_year}
 
 
-def _aggregate_pending_units_for_release() -> Dict[str, Any]:
+def _aggregate_pending_units_for_release(
+    blood_units: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     """
     Pending units for release from blood_bank_units:
       - is_check is True
       - status indicates Valid/Buffer (still in stock)
     Grouped per year of collected_at.
     """
-    units = _fetch_blood_units()
+    units = blood_units if blood_units is not None else _fetch_blood_units()
     per_year: Dict[str, List[Dict[str, Any]]] = {}
 
     for unit in units:
@@ -317,7 +327,9 @@ def _aggregate_pending_units_for_release() -> Dict[str, Any]:
     return {"success": True, "per_year": per_year}
 
 
-def _aggregate_requests_by_status() -> Dict[str, Any]:
+def _aggregate_requests_by_status(
+    requests: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     """
     Aggregate hospital requests by status per year from the blood_requests table.
 
@@ -330,13 +342,15 @@ def _aggregate_requests_by_status() -> Dict[str, Any]:
         }
       }
     """
-    db = DatabaseConnection()
-    requests: List[Dict[str, Any]] = []
-    if db.connect():
-        try:
-            requests = db.fetch_blood_requests()
-        finally:
-            db.disconnect()
+    # Allow caller to pass in pre-fetched blood_requests to avoid repeated DB hits
+    if requests is None:
+        db = DatabaseConnection()
+        requests = []
+        if db.connect():
+            try:
+                requests = db.fetch_blood_requests()
+            finally:
+                db.disconnect()
 
     per_year: Dict[str, Dict[str, Any]] = {}
 
@@ -369,20 +383,24 @@ def _aggregate_requests_by_status() -> Dict[str, Any]:
     }
 
 
-def _aggregate_decline_reasons() -> Dict[str, Any]:
+def _aggregate_decline_reasons(
+    requests: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     """
     Aggregate reasons for declined hospital requests from the blood_requests table.
 
     Uses the decline_reason / decline_reason_enum column and only counts records
     whose status indicates a declined / rejected request.
     """
-    db = DatabaseConnection()
-    requests: List[Dict[str, Any]] = []
-    if db.connect():
-        try:
-            requests = db.fetch_blood_requests()
-        finally:
-            db.disconnect()
+    # Allow caller to pass in pre-fetched blood_requests to avoid repeated DB hits
+    if requests is None:
+        db = DatabaseConnection()
+        requests = []
+        if db.connect():
+            try:
+                requests = db.fetch_blood_requests()
+            finally:
+                db.disconnect()
 
     per_year_counts: Dict[str, Dict[str, int]] = {}
     per_year_totals: Dict[str, int] = {}
@@ -614,12 +632,23 @@ def generate_overview_payload() -> Dict[str, Any]:
     )
 
     # --- Units / allocation breakdown from blood_bank_units and hospital requests ---
-    units_collected_status = _aggregate_units_collected_by_status()
-    requests_status_by_year = _aggregate_requests_by_status()
-    declined_reasons_data = _aggregate_decline_reasons()
-    units_allocated = _aggregate_units_allocated()
-    units_expired = _aggregate_units_expired()
-    pending_units = _aggregate_pending_units_for_release()
+    # Fetch blood units once and reuse for all unit-level aggregations
+    blood_units_for_aggregates = _fetch_blood_units()
+    units_collected_status = _aggregate_units_collected_by_status(blood_units_for_aggregates)
+    units_allocated = _aggregate_units_allocated(blood_units_for_aggregates)
+    units_expired = _aggregate_units_expired(blood_units_for_aggregates)
+    pending_units = _aggregate_pending_units_for_release(blood_units_for_aggregates)
+
+    # Fetch blood requests once and reuse for status / decline aggregates
+    db = DatabaseConnection()
+    blood_requests_for_aggregates: List[Dict[str, Any]] = []
+    if db.connect():
+        try:
+            blood_requests_for_aggregates = db.fetch_blood_requests()
+        finally:
+            db.disconnect()
+    requests_status_by_year = _aggregate_requests_by_status(blood_requests_for_aggregates)
+    declined_reasons_data = _aggregate_decline_reasons(blood_requests_for_aggregates)
 
     # --- Charts (HTML) ---
     chart_files = _generate_demographic_charts()

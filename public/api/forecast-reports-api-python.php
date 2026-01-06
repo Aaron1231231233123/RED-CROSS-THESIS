@@ -19,10 +19,39 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type');
-// Prevent caching to ensure real-time data from database
+// Prevent browser caching; we handle caching on the server side
 header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
+
+// Basic request parameters
+$year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
+// Any truthy refresh param (e.g. &refresh=1) forces bypass of cache
+$forceRefresh = isset($_GET['refresh']) && $_GET['refresh'] !== '0';
+
+// ------------------------------------------------------------------
+// Lightweight filesystem cache to avoid running Python on every load
+// ------------------------------------------------------------------
+$cacheDir = __DIR__ . '/../../assets/cache';
+if (!is_dir($cacheDir)) {
+    @mkdir($cacheDir, 0775, true);
+}
+// Single cache per year – JSON payload already contains everything
+$cacheFile = $cacheDir . '/forecast_dashboard_' . $year . '.json';
+// Default TTL: 5 minutes (300 seconds). Adjust if you want fresher/staler data.
+$cacheTtlSeconds = 300;
+
+if (!$forceRefresh && is_file($cacheFile)) {
+    $age = time() - filemtime($cacheFile);
+    if ($age >= 0 && $age <= $cacheTtlSeconds) {
+        $cached = file_get_contents($cacheFile);
+        if ($cached !== false && trim($cached) !== '') {
+            ob_clean();
+            echo $cached;
+            exit;
+        }
+    }
+}
 
 // Path to Python script
 $pythonScript = __DIR__ . '/../../assets/reports-model/dashboard_inventory_system_reports_admin.py';
@@ -91,9 +120,6 @@ try {
         throw new Exception('Python script path not found: ' . $pythonScript);
     }
     
-    // Get year parameter from request (default to current year if not provided)
-    $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
-    
     // Set environment variable for Python script (works on both Windows and Unix)
     putenv('FORECAST_YEAR=' . $year);
     
@@ -143,13 +169,25 @@ try {
         $result['success'] = true;
     }
     
-    // Add timestamp
+    // Add timestamp / metadata
     $result['last_updated'] = date('Y-m-d H:i:s');
     $result['data_source'] = 'python_calculator';
+    $result['cache'] = [
+        'year' => $year,
+        'from_cache' => false,
+        'ttl_seconds' => $cacheTtlSeconds,
+    ];
     
+    $json = json_encode($result, JSON_PRETTY_PRINT);
+
+    // Best-effort write to cache (ignore errors)
+    if ($json !== false) {
+        @file_put_contents($cacheFile, $json);
+    }
+
     // Ensure no stray output precedes JSON
     ob_clean();
-    echo json_encode($result, JSON_PRETTY_PRINT);
+    echo $json;
     
 } catch (Exception $e) {
     error_log("Forecast API Python Exception: " . $e->getMessage());

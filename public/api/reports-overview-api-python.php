@@ -17,12 +17,36 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type');
-// Prevent caching so the dashboard always reflects latest DB data
+// Prevent browser caching; we handle caching on the server side
 header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 
 $pythonScript = __DIR__ . '/../../assets/reports-model/reports_dashboard_overview.py';
+
+// Simple filesystem cache so the heavy overview script is not run on every page load
+$cacheDir = __DIR__ . '/../../assets/cache';
+if (!is_dir($cacheDir)) {
+    @mkdir($cacheDir, 0775, true);
+}
+// Single cache file for the overview payload
+$cacheFile = $cacheDir . '/reports_overview_dashboard.json';
+// Default TTL: 5 minutes (300 seconds)
+$cacheTtlSeconds = 300;
+// Any truthy refresh param forces a fresh run
+$forceRefresh = isset($_GET['refresh']) && $_GET['refresh'] !== '0';
+
+if (!$forceRefresh && is_file($cacheFile)) {
+    $age = time() - filemtime($cacheFile);
+    if ($age >= 0 && $age <= $cacheTtlSeconds) {
+        $cached = file_get_contents($cacheFile);
+        if ($cached !== false && trim($cached) !== '') {
+            ob_clean();
+            echo $cached;
+            exit;
+        }
+    }
+}
 
 // Detect Python executable (Windows and Linux/Mac compatible)
 $pythonExecutable = null;
@@ -114,9 +138,18 @@ try {
 
     $result['last_updated'] = date('Y-m-d H:i:s');
     $result['data_source'] = 'python_reports_overview';
+    $result['cache'] = [
+        'from_cache' => false,
+        'ttl_seconds' => $cacheTtlSeconds,
+    ];
+
+    $json = json_encode($result, JSON_PRETTY_PRINT);
+    if ($json !== false) {
+        @file_put_contents($cacheFile, $json);
+    }
 
     ob_clean();
-    echo json_encode($result, JSON_PRETTY_PRINT);
+    echo $json;
 } catch (Exception $e) {
     error_log("Reports Overview API Python Exception: " . $e->getMessage());
     ob_clean();
