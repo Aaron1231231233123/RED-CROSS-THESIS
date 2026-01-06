@@ -108,7 +108,7 @@ class PhysicalExaminationModal {
         }
     }
     
-    // Validate vital signs and update error messages and next button
+    // Validate vital signs and update next button (no visible alerts, no range blocking)
     validateVitalSigns() {
         // Get input values
         const systolic = document.getElementById('physical-blood-pressure-systolic');
@@ -117,67 +117,31 @@ class PhysicalExaminationModal {
         const bodyTemp = document.getElementById('physical-body-temp');
         const nextButton = document.querySelector('.physical-next-btn');
         
-        // Get error message elements
+        // Get error message elements and ensure ALL vital sign alerts stay hidden
         const bpError = document.getElementById('blood-pressure-error');
         const pulseError = document.getElementById('pulse-rate-error');
         const tempError = document.getElementById('body-temp-error');
+        if (bpError) bpError.style.display = 'none';
+        if (pulseError) pulseError.style.display = 'none';
+        if (tempError) tempError.style.display = 'none';
         
-        // --- Blood Pressure: no visible warnings, no range-based blocking ---
-        // We still combine/store BP elsewhere; here we only make sure the warning
-        // text is always hidden so the leader does not see any BP alert text.
-        if (bpError) {
-            bpError.style.display = 'none';
-        }
-        
-        // --- Pulse Rate: keep range-based restriction and red text ---
-        let pulseInRange = false;
-        if (pulseRate && pulseRate.value) {
-            const pulse = parseInt(pulseRate.value, 10);
-            pulseInRange = (pulse >= 60 && pulse <= 100);
-            if (!pulseInRange) {
-                if (pulseError) pulseError.style.display = 'block';
-            } else if (pulseError) {
-                pulseError.style.display = 'none';
-            }
-        } else if (pulseError) {
-            pulseError.style.display = 'none';
-        }
-        
-        // --- Body Temperature: keep range-based restriction and red text ---
-        let tempInRange = false;
-        if (bodyTemp && bodyTemp.value) {
-            const temp = parseFloat(bodyTemp.value);
-            tempInRange = (temp >= 30 && temp <= 37);
-            if (!tempInRange) {
-                if (tempError) tempError.style.display = 'block';
-            } else if (tempError) {
-                tempError.style.display = 'none';
-            }
-        } else if (tempError) {
-            tempError.style.display = 'none';
-        }
-        
-        // Update next button:
-        //  - BP: only required to be filled (no range restriction, no red)
-        //  - Pulse & Temp: must be within their reference ranges to proceed.
+        // Doctors decide on deferral; we only make sure required fields are filled
         if (nextButton && this.currentStep === 1) {
-            // Check if all vital fields are filled
+            // Only requirement: all vital fields must have some value
             const allFieldsFilled = !!(systolic?.value && diastolic?.value && pulseRate?.value && bodyTemp?.value);
             
-            // ALWAYS keep button red - never change to green
+            // Stage 1 Next button should be red (as per latest request)
+            nextButton.classList.remove('btn-success');
             nextButton.style.setProperty('background-color', '#b22222', 'important');
             nextButton.style.setProperty('border-color', '#b22222', 'important');
-            nextButton.style.setProperty('color', 'white', 'important');
-            // Remove any success classes that might make it green
-            nextButton.classList.remove('btn-success');
+            nextButton.style.setProperty('color', '#ffffff', 'important');
             
-            const canProceed = allFieldsFilled && pulseInRange && tempInRange;
-            
-            if (canProceed) {
+            if (allFieldsFilled) {
                 nextButton.style.setProperty('opacity', '1', 'important');
                 nextButton.disabled = false;
                 nextButton.style.cursor = 'pointer';
             } else {
+                // Prevent proceeding if vitals are blank (but keep red color)
                 nextButton.style.setProperty('opacity', '0.2', 'important');
                 nextButton.disabled = true;
                 nextButton.style.cursor = 'not-allowed';
