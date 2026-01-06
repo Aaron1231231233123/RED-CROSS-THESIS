@@ -62,24 +62,23 @@
                                             required>
                                         <label class="form-check-label" for="adminDonationTypeWalkIn">Walk-in</label>
                                     </div>
-                                    <small class="text-muted">Only walk-in donations are currently available for admin processing.</small>
+                                    <small class="text-muted">Select walk-in for in-house donations.</small>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- MOBILE BLOOD DONATION Section (always visible) -->
-                        <div class="admin-screening-detail-card admin-mobile-donation-section" aria-disabled="true">
+                        <div class="admin-screening-detail-card admin-mobile-donation-section">
                             <div class="admin-screening-category-title">MOBILE BLOOD DONATION</div>
                             <h6 class="admin-screening-section-subtitle">Mobile Donation Details</h6>
-                            <p class="text-muted mb-3"><i class="fas fa-info-circle me-2"></i>Mobile blood donation entries are disabled for admin submissions.</p>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="admin-screening-label">Place</label>
-                                    <input type="text" name="mobile-place" id="adminMobilePlaceInput" class="admin-screening-input" placeholder="Mobile donation disabled" disabled>
+                                    <input type="text" name="mobile-place" id="adminMobilePlaceInput" class="admin-screening-input" placeholder="Enter location">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="admin-screening-label">Organizer</label>
-                                    <input type="text" name="mobile-organizer" id="adminMobileOrganizerInput" class="admin-screening-input" placeholder="Mobile donation disabled" disabled>
+                                    <input type="text" name="mobile-organizer" id="adminMobileOrganizerInput" class="admin-screening-input" placeholder="Enter organizer">
                                 </div>
                             </div>
                         </div>

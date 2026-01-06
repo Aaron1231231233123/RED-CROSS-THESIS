@@ -122,35 +122,71 @@ document.addEventListener('DOMContentLoaded', function() {
         const mobilePlaceInput = document.getElementById('adminMobilePlaceInput');
         const mobileOrganizerInput = document.getElementById('adminMobileOrganizerInput');
         const bloodTypeSelect = document.querySelector('.admin-screening-step-content[data-step="2"] select[name="blood-type"]') || document.querySelector('select[name="blood-type"]');
+        const walkInRadio = document.getElementById('adminDonationTypeWalkIn');
 
-        // Ensure mobile donation inputs remain disabled and cleared.
+        // Initialize: Mobile fields are enabled by default
         if (mobilePlaceInput) {
-            mobilePlaceInput.value = '';
-            mobilePlaceInput.disabled = true;
-            mobilePlaceInput.placeholder = 'Mobile donation disabled';
+            mobilePlaceInput.disabled = false;
+            mobilePlaceInput.placeholder = 'Enter location';
         }
-
         if (mobileOrganizerInput) {
-            mobileOrganizerInput.value = '';
-            mobileOrganizerInput.disabled = true;
-            mobileOrganizerInput.placeholder = 'Mobile donation disabled';
+            mobileOrganizerInput.disabled = false;
+            mobileOrganizerInput.placeholder = 'Enter organizer';
         }
 
-        donationTypeInputs.forEach(input => {
-            input.addEventListener('change', () => {
-                if (input.checked) {
-                    // Always keep mobile inputs disabled when Walk-in is chosen.
+        // Handle donation type changes
+        if (walkInRadio) {
+            walkInRadio.addEventListener('change', function() {
+                if (this.checked) {
+                    // When Walk-in is selected, clear and disable mobile fields
                     if (mobilePlaceInput) {
                         mobilePlaceInput.value = '';
                         mobilePlaceInput.disabled = true;
+                        mobilePlaceInput.placeholder = 'Disabled';
                     }
                     if (mobileOrganizerInput) {
                         mobileOrganizerInput.value = '';
                         mobileOrganizerInput.disabled = true;
+                        mobileOrganizerInput.placeholder = 'Disabled';
+                    }
+                } else {
+                    // When Walk-in is cleared, re-enable mobile fields
+                    if (mobilePlaceInput) {
+                        mobilePlaceInput.disabled = false;
+                        mobilePlaceInput.placeholder = 'Enter location';
+                    }
+                    if (mobileOrganizerInput) {
+                        mobileOrganizerInput.disabled = false;
+                        mobileOrganizerInput.placeholder = 'Enter organizer';
                     }
                 }
             });
-        });
+        }
+
+        // Add change handlers for mobile fields to clear Walk-in when mobile is used
+        if (mobilePlaceInput) {
+            mobilePlaceInput.addEventListener('input', function() {
+                if (this.value.trim() !== '' && walkInRadio) {
+                    // Uncheck Walk-in radio when mobile field is filled
+                    walkInRadio.checked = false;
+                    // Trigger change event to update UI
+                    const changeEvent = new Event('change', { bubbles: true });
+                    walkInRadio.dispatchEvent(changeEvent);
+                }
+            });
+        }
+
+        if (mobileOrganizerInput) {
+            mobileOrganizerInput.addEventListener('input', function() {
+                if (this.value.trim() !== '' && walkInRadio) {
+                    // Uncheck Walk-in radio when mobile field is filled
+                    walkInRadio.checked = false;
+                    // Trigger change event to update UI
+                    const changeEvent = new Event('change', { bubbles: true });
+                    walkInRadio.dispatchEvent(changeEvent);
+                }
+            });
+        }
 
         // Add real-time validation for basic screening fields
         const bodyWeightInput = document.getElementById('adminBodyWeightInput');
@@ -316,10 +352,29 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (currentStep === 1) {
             const selectedDonation = document.querySelector('input[name="donation-type"]:checked');
-            if (!selectedDonation) {
-                showAdminAlert('Please select a donation type before proceeding.', 'warning');
+            const mobilePlaceInput = document.getElementById('adminMobilePlaceInput');
+            const mobileOrganizerInput = document.getElementById('adminMobileOrganizerInput');
+            
+            // Check if Walk-in is selected
+            const hasWalkIn = selectedDonation && selectedDonation.checked;
+            
+            // Check if mobile donation fields are filled
+            const hasMobilePlace = mobilePlaceInput && mobilePlaceInput.value.trim() !== '';
+            const hasMobileOrganizer = mobileOrganizerInput && mobileOrganizerInput.value.trim() !== '';
+            const hasMobileDonation = hasMobilePlace || hasMobileOrganizer;
+            
+            // Either Walk-in must be selected OR mobile fields must be filled
+            if (!hasWalkIn && !hasMobileDonation) {
+                showAdminAlert('Please select a donation type (Walk-in) or fill in mobile donation details (Place or Organizer) before proceeding.', 'warning');
                 return false;
             }
+            
+            // If mobile donation is selected, both fields should ideally be filled, but we'll allow if at least one is filled
+            if (hasMobileDonation && !hasWalkIn) {
+                // Mobile donation selected - validate that at least one field is filled (already checked above)
+                // Optionally, we could require both fields, but for now we'll allow if at least one is filled
+            }
+            
             return true;
         } else if (currentStep === 2) {
             // Validate step 2 - Basic Info with specific validation for weight and specific gravity
@@ -566,14 +621,42 @@ document.addEventListener('DOMContentLoaded', function() {
         reviewHtml += '</div>';
 
         // Donation Type
-        const selectedDonationType = formData.get('donation-type') || 'Walk-in';
+        const selectedDonationType = formData.get('donation-type') || '';
+        const mobilePlace = formData.get('mobile-place') || '';
+        const mobileOrganizer = formData.get('mobile-organizer') || '';
+        const hasMobileDonation = mobilePlace.trim() !== '' || mobileOrganizer.trim() !== '';
+        
+        // Determine donation type: if mobile fields are filled, it's a mobile donation; otherwise use selected type or default to Walk-in
+        let donationTypeDisplay = 'Walk-in';
+        if (hasMobileDonation && !selectedDonationType) {
+            donationTypeDisplay = 'Mobile Blood Donation';
+        } else if (selectedDonationType) {
+            donationTypeDisplay = selectedDonationType;
+        }
 
         reviewHtml += '<div class="mb-3">';
         reviewHtml += '<h6 class="text-danger mb-2">Donation Type</h6>';
         reviewHtml += `<div class="admin-screening-review-item">
             <span class="admin-screening-review-label">Type:</span>
-            <span class="admin-screening-review-value">${selectedDonationType}</span>
+            <span class="admin-screening-review-value">${donationTypeDisplay}</span>
         </div>`;
+        
+        // Show mobile donation details if applicable
+        if (hasMobileDonation) {
+            if (mobilePlace.trim() !== '') {
+                reviewHtml += `<div class="admin-screening-review-item">
+                    <span class="admin-screening-review-label">Place:</span>
+                    <span class="admin-screening-review-value">${mobilePlace}</span>
+                </div>`;
+            }
+            if (mobileOrganizer.trim() !== '') {
+                reviewHtml += `<div class="admin-screening-review-item">
+                    <span class="admin-screening-review-label">Organizer:</span>
+                    <span class="admin-screening-review-value">${mobileOrganizer}</span>
+                </div>`;
+            }
+        }
+        
         reviewHtml += '</div>';
 
         reviewContent.innerHTML = reviewHtml;
@@ -613,9 +696,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get all form data
         const formData = new FormData(adminScreeningForm);
         
-        // Get donation type (defaults to Walk-in)
-        const selectedDonationType = formData.get('donation-type') || 'Walk-in';
-        formData.set('donation-type', selectedDonationType);
+        // Determine donation type: check if mobile fields are filled or Walk-in is selected
+        const selectedDonationType = formData.get('donation-type') || '';
+        const mobilePlace = formData.get('mobile-place') || '';
+        const mobileOrganizer = formData.get('mobile-organizer') || '';
+        const hasMobileDonation = mobilePlace.trim() !== '' || mobileOrganizer.trim() !== '';
+        
+        // Set donation type: if mobile fields are filled, use "Mobile Blood Donation"; otherwise use selected type or default to "Walk-in"
+        let finalDonationType = 'Walk-in';
+        if (hasMobileDonation && !selectedDonationType) {
+            finalDonationType = 'Mobile Blood Donation';
+        } else if (selectedDonationType) {
+            finalDonationType = selectedDonationType;
+        }
+        
+        formData.set('donation-type', finalDonationType);
         
         // Apply auto-increment logic for Red Cross donations before submission
         const rcInput = document.querySelector('input[name="red-cross"]');
@@ -781,6 +876,18 @@ function openAdminScreeningModal(donorData) {
     const form = document.getElementById('adminScreeningForm');
     if (form) {
         form.reset();
+    }
+
+    // Ensure mobile fields are enabled after reset
+    const mobilePlaceInput = document.getElementById('adminMobilePlaceInput');
+    const mobileOrganizerInput = document.getElementById('adminMobileOrganizerInput');
+    if (mobilePlaceInput) {
+        mobilePlaceInput.disabled = false;
+        mobilePlaceInput.placeholder = 'Enter location';
+    }
+    if (mobileOrganizerInput) {
+        mobileOrganizerInput.disabled = false;
+        mobileOrganizerInput.placeholder = 'Enter organizer';
     }
 
     // Set donor_id in hidden field if it exists
