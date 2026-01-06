@@ -134,39 +134,28 @@ document.addEventListener('DOMContentLoaded', function() {
             mobileOrganizerInput.placeholder = 'Enter organizer';
         }
 
-        // Handle donation type changes
+        // Handle donation type changes - mobile fields stay enabled
         if (walkInRadio) {
             walkInRadio.addEventListener('change', function() {
                 if (this.checked) {
-                    // When Walk-in is selected, clear and disable mobile fields
+                    // When Walk-in is selected, clear mobile fields but keep them enabled
                     if (mobilePlaceInput) {
                         mobilePlaceInput.value = '';
-                        mobilePlaceInput.disabled = true;
-                        mobilePlaceInput.placeholder = 'Disabled';
+                        // Keep enabled - don't disable
                     }
                     if (mobileOrganizerInput) {
                         mobileOrganizerInput.value = '';
-                        mobileOrganizerInput.disabled = true;
-                        mobileOrganizerInput.placeholder = 'Disabled';
-                    }
-                } else {
-                    // When Walk-in is cleared, re-enable mobile fields
-                    if (mobilePlaceInput) {
-                        mobilePlaceInput.disabled = false;
-                        mobilePlaceInput.placeholder = 'Enter location';
-                    }
-                    if (mobileOrganizerInput) {
-                        mobileOrganizerInput.disabled = false;
-                        mobileOrganizerInput.placeholder = 'Enter organizer';
+                        // Keep enabled - don't disable
                     }
                 }
+                // Mobile fields remain enabled whether walk-in is checked or not
             });
         }
 
         // Add change handlers for mobile fields to clear Walk-in when mobile is used
         if (mobilePlaceInput) {
             mobilePlaceInput.addEventListener('input', function() {
-                if (this.value.trim() !== '' && walkInRadio) {
+                if (this.value.trim() !== '' && walkInRadio && walkInRadio.checked) {
                     // Uncheck Walk-in radio when mobile field is filled
                     walkInRadio.checked = false;
                     // Trigger change event to update UI
@@ -178,7 +167,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (mobileOrganizerInput) {
             mobileOrganizerInput.addEventListener('input', function() {
-                if (this.value.trim() !== '' && walkInRadio) {
+                if (this.value.trim() !== '' && walkInRadio && walkInRadio.checked) {
                     // Uncheck Walk-in radio when mobile field is filled
                     walkInRadio.checked = false;
                     // Trigger change event to update UI
@@ -369,11 +358,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
             
-            // If mobile donation is selected, both fields should ideally be filled, but we'll allow if at least one is filled
-            if (hasMobileDonation && !hasWalkIn) {
-                // Mobile donation selected - validate that at least one field is filled (already checked above)
-                // Optionally, we could require both fields, but for now we'll allow if at least one is filled
-            }
+            // If both are selected, prefer Walk-in (it's explicitly selected)
+            // Mobile fields remain enabled but won't be used if Walk-in is selected
             
             return true;
         } else if (currentStep === 2) {
@@ -629,9 +615,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // Determine donation type: if mobile fields are filled, it's a mobile donation; otherwise use selected type or default to Walk-in
         let donationTypeDisplay = 'Walk-in';
         if (hasMobileDonation && !selectedDonationType) {
-            donationTypeDisplay = 'Mobile Blood Donation';
+            donationTypeDisplay = 'Mobile Blood Donation'; // Display text (user-friendly)
         } else if (selectedDonationType) {
-            donationTypeDisplay = selectedDonationType;
+            // Format donation type for display (convert kebab-case to title case)
+            donationTypeDisplay = selectedDonationType.split('-').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
         }
 
         reviewHtml += '<div class="mb-3">';
@@ -701,13 +690,22 @@ document.addEventListener('DOMContentLoaded', function() {
         const mobilePlace = formData.get('mobile-place') || '';
         const mobileOrganizer = formData.get('mobile-organizer') || '';
         const hasMobileDonation = mobilePlace.trim() !== '' || mobileOrganizer.trim() !== '';
+        const hasWalkIn = selectedDonationType && selectedDonationType.toLowerCase() === 'walk-in';
         
-        // Set donation type: if mobile fields are filled, use "Mobile Blood Donation"; otherwise use selected type or default to "Walk-in"
-        let finalDonationType = 'Walk-in';
-        if (hasMobileDonation && !selectedDonationType) {
-            finalDonationType = 'Mobile Blood Donation';
+        // Set donation type: prefer Walk-in if selected, otherwise use mobile if fields are filled
+        let finalDonationType = 'walk-in';
+        if (hasWalkIn) {
+            // Walk-in is explicitly selected, use it (preferred over mobile)
+            finalDonationType = 'walk-in';
+            // Clear mobile fields when walk-in is selected to avoid confusion
+            formData.set('mobile-place', '');
+            formData.set('mobile-organizer', '');
+        } else if (hasMobileDonation) {
+            // Mobile fields are filled and walk-in is not selected
+            finalDonationType = 'mobile'; // Use lowercase 'mobile' for backend compatibility
         } else if (selectedDonationType) {
-            finalDonationType = selectedDonationType;
+            // Use selected type (normalize to lowercase for backend compatibility)
+            finalDonationType = selectedDonationType.toLowerCase();
         }
         
         formData.set('donation-type', finalDonationType);
@@ -878,15 +876,15 @@ function openAdminScreeningModal(donorData) {
         form.reset();
     }
 
-    // Ensure mobile fields are enabled after reset
+    // Ensure mobile fields are always enabled after reset
     const mobilePlaceInput = document.getElementById('adminMobilePlaceInput');
     const mobileOrganizerInput = document.getElementById('adminMobileOrganizerInput');
     if (mobilePlaceInput) {
-        mobilePlaceInput.disabled = false;
+        mobilePlaceInput.disabled = false; // Always enabled
         mobilePlaceInput.placeholder = 'Enter location';
     }
     if (mobileOrganizerInput) {
-        mobileOrganizerInput.disabled = false;
+        mobileOrganizerInput.disabled = false; // Always enabled
         mobileOrganizerInput.placeholder = 'Enter organizer';
     }
 

@@ -228,10 +228,17 @@ function processAdminScreeningForm() {
 
         // Get donation type from POST
         $donation_type = '';
-        if (isset($_POST['donation-type'])) {
+        if (isset($_POST['donation-type']) && !empty($_POST['donation-type'])) {
             $donation_type = mapDonationType($_POST['donation-type']);
         } elseif (isset($_POST['donor_type']) && $_POST['donor_type'] === 'Mobile') {
             $donation_type = 'mobile';
+        } elseif ((isset($_POST['mobile-place']) && !empty(trim($_POST['mobile-place']))) || 
+                   (isset($_POST['mobile-organizer']) && !empty(trim($_POST['mobile-organizer'])))) {
+            // If mobile fields are filled but donation-type is not set, default to 'mobile'
+            $donation_type = 'mobile';
+        } else {
+            // Default to 'walk-in' if nothing is specified
+            $donation_type = 'walk-in';
         }
         
         // Prepare the base data for insertion
