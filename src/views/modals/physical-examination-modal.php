@@ -99,9 +99,8 @@
                                        novalidate
                                        style="flex: 1;">
                             </div>
-                            <div id="blood-pressure-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;">
-                                Blood pressure should be between 90-120 / 60-100
-                            </div>
+                            <!-- Leader requested no visible BP red text; keep div for JS hook but leave empty -->
+                            <div id="blood-pressure-error" class="text-danger" style="display: none; font-size: 0.875rem; margin-top: 0.25rem;"></div>
                             <input type="hidden" 
                                    id="physical-blood-pressure" 
                                    name="blood_pressure">

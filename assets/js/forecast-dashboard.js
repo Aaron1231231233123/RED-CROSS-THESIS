@@ -1,10 +1,14 @@
 (() => {
-    const API_URL = '../api/forecast-reports-api-python.php';
+    const FORECAST_API_URL = '../api/forecast-reports-api-python.php';
+    const OVERVIEW_API_URL = '../api/reports-overview-api-python.php';
     const tableBody = document.querySelector('#reportsTable tbody');
     const projectedPanel = document.getElementById('projectedStockPanel');
     const refreshBtn = document.getElementById('refreshReportsBtn');
     const detailsModalEl = document.getElementById('detailsModal');
     const detailsBody = document.getElementById('detailsBody');
+    const generateReportsModalEl = document.getElementById('generateReportsModal');
+    const confirmGenerateReportsBtn = document.getElementById('confirmGenerateReportsBtn');
+    const reportCoverageYearSelect = document.getElementById('reportCoverageYear');
     const TABLE_COLUMNS = 7;
     const exportBtn = document.getElementById('exportBtn');
     const yearFilterCombined = document.getElementById('yearFilterCombined');
@@ -25,6 +29,15 @@
         monthly: 'kpiExpiringMonthly',
     };
 
+    // New KPI elements for the Reports overview (donor, inventory, hospital)
+    const overviewKpiIds = {
+        activeDonors: 'kpiActiveDonors',
+        eligibleToday: 'kpiEligibleToday',
+        unitsAvailable: 'kpiUnitsAvailable',
+        unitsNearingExpiry: 'kpiUnitsNearingExpiry',
+        hospitalRequestsToday: 'kpiHospitalRequestsToday',
+    };
+
     const chartIds = {
         supply: 'supplyChartImg',
         demand: 'demandChartImg',
@@ -39,6 +52,21 @@
         projected_stock_html: 'projectedStockFrame',
     };
 
+    // Overview chart iframes (served via forecast-asset.php)
+    const overviewIframeIds = {
+        donor_age: 'chartDonorAge',
+        donor_location: 'chartDonorLocation',
+        donor_sex: 'chartDonorSex',
+        donor_eligibility: 'chartDonorEligibility',
+        donor_blood_type: 'chartDonorBloodType',
+        donation_frequency: 'chartDonationFrequency',
+        donations_by_month: 'chartDonationsByMonth',
+        mobile_vs_inhouse: 'chartMobileVsInhouse',
+        successful_vs_unsuccessful: 'chartSuccessVsUnsuccessful',
+        monthly_requests_trend: 'chartMonthlyRequestsTrend',
+        requests_by_blood_type: 'chartRequestsByBloodType',
+    };
+
     function setTableMessage(message, isError = false) {
         if (!tableBody) return;
         tableBody.innerHTML = `<tr><td colspan="${TABLE_COLUMNS}" class="text-center py-4 ${isError ? 'text-danger' : ''}">
@@ -51,6 +79,10 @@
         if (isLoading) {
             setTableMessage('Loading forecast data...');
             Object.values(kpiIds).forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '...';
+            });
+            Object.values(overviewKpiIds).forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = '...';
             });
@@ -96,6 +128,38 @@
                 }
             }
         });
+    }
+
+    function updateOverviewKpis(kpis = {}) {
+        const {
+            total_active_donors = 0,
+            eligible_donors_today = 0,
+            total_blood_units_available = 0,
+            units_nearing_expiry = 0,
+            total_hospital_requests_today = 0,
+        } = kpis || {};
+
+        const mappings = {
+            [overviewKpiIds.activeDonors]: total_active_donors,
+            [overviewKpiIds.eligibleToday]: eligible_donors_today,
+            [overviewKpiIds.unitsAvailable]: total_blood_units_available,
+            [overviewKpiIds.unitsNearingExpiry]: units_nearing_expiry,
+            [overviewKpiIds.hospitalRequestsToday]: total_hospital_requests_today,
+        };
+
+        Object.entries(mappings).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = (Number(value) || 0).toLocaleString();
+            }
+        });
+    }
+
+    function updateForecastDemandKpi(summary = {}) {
+        const el = document.getElementById('kpiForecastDemand');
+        if (!el) return;
+        const value = Number(summary.total_forecasted_demand || 0) || 0;
+        el.textContent = value.toLocaleString();
     }
 
     function formatNumber(value = 0) {
@@ -213,6 +277,14 @@
         });
     }
 
+    function updateOverviewCharts() {
+        // Use forecast-asset.php proxy to serve the HTML charts safely
+        Object.entries(overviewIframeIds).forEach(([key, id]) => {
+            const path = `../api/forecast-asset.php?asset=${key}`;
+            updateResource(id, path);
+        });
+    }
+
     function formatPercentage(part = 0, whole = 0) {
         if (!whole) return '0%';
         return `${((part / whole) * 100).toFixed(1)}%`;
@@ -324,17 +396,31 @@
         toggleLoading(true);
         try {
             const yearParam = selectedYear ? `&year=${selectedYear}` : '';
-            const url = `${API_URL}?ts=${Date.now()}${yearParam}${force ? `&refresh=${Date.now()}` : ''}`;
+            const url = `${FORECAST_API_URL}?ts=${Date.now()}${yearParam}${force ? `&refresh=${Date.now()}` : ''}`;
             const response = await fetch(url, { cache: 'no-cache' });
-            const data = await response.json();
+
+            // Read as text first so we can surface any PHP/HTML errors that break JSON
+            const raw = await response.text();
+            console.debug('Forecast raw response:', raw);
+
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (parseError) {
+                console.error('Error parsing forecast JSON:', parseError);
+                throw new Error('Forecast API returned invalid JSON. Check server/Python error logs.');
+            }
+
             if (!data.success) {
                 throw new Error(data.error || 'Unable to load forecasts');
             }
+
             console.log('Forecast data loaded:', data);
             if (data.asset_errors && data.asset_errors.length > 0) {
                 console.warn('Asset generation errors:', data.asset_errors);
             }
             updateKpis(data.summary);
+            updateForecastDemandKpi(data.summary);
             renderTable(data.forecast_rows);
             renderProjectedStock(data.projected_stock);
             updateCharts(data.charts);
@@ -346,6 +432,35 @@
         } catch (error) {
             console.error('Error loading forecast data:', error);
             setTableMessage(error.message || 'Failed to load forecast data', true);
+        }
+    }
+
+    async function loadOverviewData() {
+        try {
+            const url = `${OVERVIEW_API_URL}?ts=${Date.now()}`;
+            const response = await fetch(url, { cache: 'no-cache' });
+
+            // Read raw text first so we can log any PHP warnings/HTML that break JSON
+            const raw = await response.text();
+            console.debug('Overview raw response:', raw);
+
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (parseError) {
+                console.error('Error parsing overview JSON:', parseError);
+                return;
+            }
+
+            if (!data.success) {
+                console.warn('Overview API returned error payload:', data);
+                return;
+            }
+
+            updateOverviewKpis(data.kpis || {});
+            updateOverviewCharts();
+        } catch (error) {
+            console.error('Error loading overview data:', error);
         }
     }
 
@@ -411,10 +526,72 @@
         initializeYearFilter();
         updateChartTitles(selectedYear);
         loadData();
+        loadOverviewData();
+
+        // Populate coverage year dropdown in the Generate Reports modal
+        if (reportCoverageYearSelect) {
+            const currentYear = new Date().getFullYear();
+            const startYear = 2023; // earliest year you want available
+            reportCoverageYearSelect.innerHTML = '';
+
+            for (let year = startYear; year <= currentYear; year++) {
+                const opt = document.createElement('option');
+                opt.value = year;
+                opt.textContent = year;
+                if (year === selectedYear) {
+                    opt.selected = true;
+                }
+                reportCoverageYearSelect.appendChild(opt);
+            }
+        }
     });
     
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => loadData(true));
+        refreshBtn.addEventListener('click', () => {
+            loadData(true);
+            loadOverviewData();
+        });
+    }
+
+    // When user confirms in the Generate Reports modal, THEN open
+    // the data-report page (new tab), leaving the dashboard as-is.
+    if (confirmGenerateReportsBtn) {
+        confirmGenerateReportsBtn.addEventListener('click', () => {
+            const defaultLabel = confirmGenerateReportsBtn.querySelector('.default-label');
+            const loadingLabel = confirmGenerateReportsBtn.querySelector('.loading-label');
+
+            if (defaultLabel && loadingLabel) {
+                defaultLabel.classList.add('d-none');
+                loadingLabel.classList.remove('d-none');
+            }
+            confirmGenerateReportsBtn.disabled = true;
+            
+            const year = reportCoverageYearSelect
+                ? parseInt(reportCoverageYearSelect.value, 10)
+                : selectedYear;
+
+            const params = new URLSearchParams({ year: String(year) });
+            const reportUrl = `data-report.php?${params.toString()}`;
+            const win = window.open(reportUrl, '_blank');
+            if (!win) {
+                window.location.href = reportUrl;
+            }
+
+            // Close modal & reset button back so dashboard remains usable
+            setTimeout(() => {
+                if (generateReportsModalEl && window.bootstrap?.Modal) {
+                    const modal = window.bootstrap.Modal.getInstance(generateReportsModalEl)
+                        || window.bootstrap.Modal.getOrCreateInstance(generateReportsModalEl);
+                    modal?.hide();
+                }
+
+                if (defaultLabel && loadingLabel) {
+                    defaultLabel.classList.remove('d-none');
+                    loadingLabel.classList.add('d-none');
+                }
+                confirmGenerateReportsBtn.disabled = false;
+            }, 400);
+        });
     }
 
     if (tableBody) {

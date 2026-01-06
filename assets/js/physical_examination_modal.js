@@ -122,58 +122,47 @@ class PhysicalExaminationModal {
         const pulseError = document.getElementById('pulse-rate-error');
         const tempError = document.getElementById('body-temp-error');
         
-        let allInRange = true;
-        
-        // Check Blood Pressure (Normal: Systolic 90-120, Diastolic 60-100)
-        let bpInRange = false;
-        if (systolic && diastolic && systolic.value && diastolic.value) {
-            const sys = parseInt(systolic.value);
-            const dia = parseInt(diastolic.value);
-            bpInRange = (sys >= 90 && sys <= 120 && dia >= 60 && dia <= 100);
-            if (!bpInRange) {
-                allInRange = false;
-                if (bpError) bpError.style.display = 'block';
-            } else {
-                if (bpError) bpError.style.display = 'none';
-            }
-        } else {
-            if (bpError) bpError.style.display = 'none';
+        // --- Blood Pressure: no visible warnings, no range-based blocking ---
+        // We still combine/store BP elsewhere; here we only make sure the warning
+        // text is always hidden so the leader does not see any BP alert text.
+        if (bpError) {
+            bpError.style.display = 'none';
         }
         
-        // Check Pulse Rate (Normal: 60-100 BPM)
+        // --- Pulse Rate: keep range-based restriction and red text ---
         let pulseInRange = false;
         if (pulseRate && pulseRate.value) {
-            const pulse = parseInt(pulseRate.value);
+            const pulse = parseInt(pulseRate.value, 10);
             pulseInRange = (pulse >= 60 && pulse <= 100);
             if (!pulseInRange) {
-                allInRange = false;
                 if (pulseError) pulseError.style.display = 'block';
-            } else {
-                if (pulseError) pulseError.style.display = 'none';
+            } else if (pulseError) {
+                pulseError.style.display = 'none';
             }
-        } else {
-            if (pulseError) pulseError.style.display = 'none';
+        } else if (pulseError) {
+            pulseError.style.display = 'none';
         }
         
-        // Check Body Temperature (Normal: 30-37°C)
+        // --- Body Temperature: keep range-based restriction and red text ---
         let tempInRange = false;
         if (bodyTemp && bodyTemp.value) {
             const temp = parseFloat(bodyTemp.value);
             tempInRange = (temp >= 30 && temp <= 37);
             if (!tempInRange) {
-                allInRange = false;
                 if (tempError) tempError.style.display = 'block';
-            } else {
-                if (tempError) tempError.style.display = 'none';
+            } else if (tempError) {
+                tempError.style.display = 'none';
             }
-        } else {
-            if (tempError) tempError.style.display = 'none';
+        } else if (tempError) {
+            tempError.style.display = 'none';
         }
         
-        // Update next button based on validation
+        // Update next button:
+        //  - BP: only required to be filled (no range restriction, no red)
+        //  - Pulse & Temp: must be within their reference ranges to proceed.
         if (nextButton && this.currentStep === 1) {
-            // Check if all fields are filled
-            const allFieldsFilled = systolic?.value && diastolic?.value && pulseRate?.value && bodyTemp?.value;
+            // Check if all vital fields are filled
+            const allFieldsFilled = !!(systolic?.value && diastolic?.value && pulseRate?.value && bodyTemp?.value);
             
             // ALWAYS keep button red - never change to green
             nextButton.style.setProperty('background-color', '#b22222', 'important');
@@ -182,14 +171,13 @@ class PhysicalExaminationModal {
             // Remove any success classes that might make it green
             nextButton.classList.remove('btn-success');
             
-            // Button is enabled only if all fields are filled AND all values are in range
-            if (allFieldsFilled && allInRange) {
-                // All values in range and filled: 100% opacity, enabled, red color
+            const canProceed = allFieldsFilled && pulseInRange && tempInRange;
+            
+            if (canProceed) {
                 nextButton.style.setProperty('opacity', '1', 'important');
                 nextButton.disabled = false;
                 nextButton.style.cursor = 'pointer';
             } else {
-                // Values out of range or not filled: 20% opacity, disabled, red color
                 nextButton.style.setProperty('opacity', '0.2', 'important');
                 nextButton.disabled = true;
                 nextButton.style.cursor = 'not-allowed';
@@ -953,27 +941,16 @@ class PhysicalExaminationModal {
             this.markFieldInvalid(field, 'This field is required');
             isValid = false;
         }
-        // Validate blood pressure systolic
+        // Blood Pressure: only check that a value exists; do NOT mark red for range
         else if (field.id === 'physical-blood-pressure-systolic' && value) {
-            const sys = parseInt(value);
-            if (sys < 70 || sys > 200) {
-                this.markFieldInvalid(field, 'Systolic should be between 70-200');
-                isValid = false;
-            } else {
-                this.markFieldValid(field);
-            }
+            // Treat any entered numeric value as acceptable for UI purposes.
+            this.markFieldValid(field);
             // Also combine BP when validating
             this.combineBloodPressure();
         }
-        // Validate blood pressure diastolic
+        // Blood Pressure: only check that a value exists; do NOT mark red for range
         else if (field.id === 'physical-blood-pressure-diastolic' && value) {
-            const dia = parseInt(value);
-            if (dia < 40 || dia > 130) {
-                this.markFieldInvalid(field, 'Diastolic should be between 40-130');
-                isValid = false;
-            } else {
-                this.markFieldValid(field);
-            }
+            this.markFieldValid(field);
             // Also combine BP when validating
             this.combineBloodPressure();
         }

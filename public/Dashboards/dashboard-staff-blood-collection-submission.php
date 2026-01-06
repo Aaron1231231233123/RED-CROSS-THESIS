@@ -2,9 +2,13 @@
 session_start();
 require_once '../../assets/conn/db_conn.php';
 require '../../assets/php_func/user_roles_staff.php';
+require_once '../../assets/php_func/auto_transfer_blood_collection_needs_review.php';
 
-
-
+// Before building the dashboard data, auto-transfer any stale blood_collection
+// needs_review flags (older than 1 day) into medical_history.needs_review.
+// This catches cases where a donor left without being formally deferred.
+$autoTransferSummary = autoTransferBloodCollectionNeedsReview(1);
+error_log('Auto-transfer stale blood_collection needs_review summary: ' . json_encode($autoTransferSummary));
 
 // Add pagination settings
 $records_per_page = 15;

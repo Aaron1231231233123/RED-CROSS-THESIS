@@ -10,7 +10,11 @@
  * to: '../api/forecast-reports-api-python.php'
  */
 
-session_start();
+// Buffer all output so any PHP warnings/notices don't corrupt JSON
+ob_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
@@ -63,6 +67,8 @@ if ($pythonExecutable === null) {
 if ($pythonExecutable === null) {
     // Fallback: Use original PHP API if Python is not available
     error_log("Python not found. Falling back to PHP API. Tried commands: " . implode(', ', $pythonCommands));
+    // Clear any buffered output before including fallback
+    ob_clean();
     include_once __DIR__ . '/forecast-reports-api.php';
     exit;
 }
@@ -141,10 +147,13 @@ try {
     $result['last_updated'] = date('Y-m-d H:i:s');
     $result['data_source'] = 'python_calculator';
     
+    // Ensure no stray output precedes JSON
+    ob_clean();
     echo json_encode($result, JSON_PRETTY_PRINT);
     
 } catch (Exception $e) {
     error_log("Forecast API Python Exception: " . $e->getMessage());
+    ob_clean();
     echo json_encode([
         'success' => false,
         'error' => 'Failed to generate forecasts using Python',
@@ -154,6 +163,7 @@ try {
     ], JSON_PRETTY_PRINT);
 } catch (Error $e) {
     error_log("Forecast API Python Fatal Error: " . $e->getMessage());
+    ob_clean();
     echo json_encode([
         'success' => false,
         'error' => 'Fatal error in Python forecast generation',
@@ -163,4 +173,3 @@ try {
     ], JSON_PRETTY_PRINT);
 }
 ?>
-

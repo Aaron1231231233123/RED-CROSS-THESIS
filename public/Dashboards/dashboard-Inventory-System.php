@@ -1208,7 +1208,26 @@ h6 {
                 <div class="card-body inventory-system-stats-body">
                     <div class="inventory-system-stats-container">
                         <span class="inventory-system-stats-label">Blood Donors</span>
-                        <span class="inventory-system-stats-value"><?php echo $bloodReceivedCount; ?></span>
+                        <span class="inventory-system-stats-value">
+                            <?php
+                            // Align Blood Donors count with eligibility-based donor universe
+                            try {
+                                $eligResponse = supabaseRequest("eligibility?select=donor_id&order=donor_id.asc");
+                                $uniqueDonors = [];
+                                if (isset($eligResponse['data']) && is_array($eligResponse['data'])) {
+                                    foreach ($eligResponse['data'] as $row) {
+                                        if (isset($row['donor_id'])) {
+                                            $uniqueDonors[(int)$row['donor_id']] = true;
+                                        }
+                                    }
+                                }
+                                echo count($uniqueDonors);
+                            } catch (Exception $e) {
+                                // Fallback to previous metric if Supabase call fails
+                                echo $bloodReceivedCount;
+                            }
+                            ?>
+                        </span>
                     </div>
                 </div>
             </div>

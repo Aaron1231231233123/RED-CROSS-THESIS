@@ -116,7 +116,8 @@ class DatabaseConnection:
         endpoint = (
             "blood_bank_units?"
             "select=unit_id,unit_serial_number,blood_collection_id,donor_id,"
-            "blood_type,collected_at,created_at,status,handed_over_at,expires_at"
+            "blood_type,collected_at,created_at,status,handed_over_at,expires_at,"
+            "disposed_at,disposition_reason,hospital_from,request_id,is_check"
             "&order=collected_at.asc"
         )
         return self.supabase_request(endpoint)
