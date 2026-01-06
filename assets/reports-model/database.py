@@ -14,6 +14,18 @@ import requests
 from config import BLOOD_TYPES, SUPABASE_API_KEY, SUPABASE_URL
 
 
+# Simple in-process cache so multiple report modules that request the same
+# Supabase endpoint during a single Python run can share results.
+#
+# This does NOT change behaviour for users, because:
+# - All of these scripts are read-only analytics.
+# - A single CLI / API invocation is short-lived (seconds), so the data
+#   is effectively static during one run.
+#
+# Keyed by the raw endpoint string and limit value used by supabase_request.
+_SUPABASE_CACHE: Dict[str, List[Dict]] = {}
+
+
 class DatabaseConnection:
     """Handles database connections and queries."""
 
@@ -55,6 +67,12 @@ class DatabaseConnection:
         """
         Make Supabase requests with pagination support (real-time).
         """
+        cache_key = f"{endpoint}::limit={limit}"
+        if cache_key in _SUPABASE_CACHE:
+            # Return cached copy for this process – callers treat the data as
+            # read-only, so it's safe to share the same list instance.
+            return _SUPABASE_CACHE[cache_key]
+
         all_data = []
         offset = 0
 
@@ -104,6 +122,7 @@ class DatabaseConnection:
                 print(f"Error in supabase_request: {exc}", file=sys.stderr)
                 break
 
+        _SUPABASE_CACHE[cache_key] = all_data
         return all_data
 
     # ------------------------------------------------------------------ #
