@@ -3356,6 +3356,7 @@ function getCacheStats() {
      <!-- Admin-specific donor modal script -->
      <script src="../../assets/js/admin-donor-modal.js" defer></script>
     <!-- Admin Donor Registration Modal -->
+    <script src="../../assets/js/duplicate_donor_check_admin.js" defer></script>
     <script src="../../assets/js/admin-donor-registration-modal.js" defer></script>
     <!-- Admin-specific access lock manager and guard -->
     <script>

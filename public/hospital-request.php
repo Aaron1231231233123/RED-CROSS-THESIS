@@ -33,8 +33,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
 
-    // Fetch user from Supabase including role_id
-    $query = "users?email=eq.$email&select=user_id,email,password_hash,role_id";
+    // Fetch user from Supabase including role_id and is_active
+    $query = "users?email=eq.$email&select=user_id,email,password_hash,role_id,is_active";
     $users = supabaseRequest($query, "GET");
 
     if (!empty($users)) {
@@ -42,13 +42,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // Verify password
         if (password_verify($password, $user['password_hash'])) {
-            $_SESSION['user_id'] = $user['user_id'];
-            $_SESSION['email'] = $user['email'];
-            $_SESSION['role_id'] = $user['role_id'];
+            // Check if account is active
+            $is_active = isset($user['is_active']) ? (bool)$user['is_active'] : true;
+            
+            if (!$is_active) {
+                // Account is deactivated - show modal
+                $account_deactivated = true;
+                $error_message = "This account has been deactivated. Please contact an administrator.";
+            } else {
+                // Account is active - proceed with login
+                $_SESSION['user_id'] = $user['user_id'];
+                $_SESSION['email'] = $user['email'];
+                $_SESSION['role_id'] = $user['role_id'];
 
-            error_log("User logged in - Role ID: " . $_SESSION['role_id']); // Debug log
+                error_log("User logged in - Role ID: " . $_SESSION['role_id']); // Debug log
 
-            // Redirect based on role
+                // Redirect based on role
             switch ($_SESSION['role_id']) {
                 case 1:
                     header("Location: Dashboards/dashboard-Inventory-System.php");
@@ -64,6 +73,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     header("Location: hospital-request.php");
             }
             exit();
+            }
         } else {
             $error_message = "Invalid email or password.";
         }
@@ -80,6 +90,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Red Cross Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* General Reset */
         * {
@@ -472,7 +484,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="login-form">
             <h2>Hospital Request Login</h2>
             
-            <?php if (!empty($error_message)): ?>
+            <?php if (!empty($error_message) && !isset($account_deactivated)): ?>
                 <div class="error-message">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     <?php echo $error_message; ?>
@@ -527,6 +539,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
     </div>
 
+    <!-- Account Deactivated Modal -->
+    <div class="modal fade" id="accountDeactivatedModal" tabindex="-1" aria-labelledby="accountDeactivatedModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="accountDeactivatedModalLabel">
+                        <i class="fas fa-user-times me-2"></i>
+                        Account Deactivated
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-exclamation-triangle text-danger" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="mb-3">Account Access Denied</h5>
+                    <p class="mb-0">This account has been deactivated. Please contact an administrator to reactivate your account.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Password visibility toggle
         function togglePassword() {
@@ -573,6 +611,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 document.getElementById('email').value = rememberedEmail;
                 document.getElementById('remember').checked = true;
             }
+            
+            // Show account deactivated modal if needed
+            <?php if (isset($account_deactivated) && $account_deactivated): ?>
+            const modal = new bootstrap.Modal(document.getElementById('accountDeactivatedModal'));
+            modal.show();
+            <?php endif; ?>
         });
     </script>
 </body>

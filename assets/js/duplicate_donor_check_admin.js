@@ -1,10 +1,11 @@
 /**
- * Duplicate Donor Check System (Admin-specific)
+ * Duplicate Donor Check System (Admin & Staff/Reviewer)
  * 
  * This module provides functionality to check for existing donors
  * based on personal information (surname, first_name, middle_name, birthdate)
  * and displays alerts when duplicates are found.
  * 
+ * Supports both Admin (role_id 1) and Staff/Reviewer (role_id 3) users
  * Admin-specific version with admin-specific naming to avoid conflicts with staff side
  */
 
@@ -20,27 +21,48 @@ class DuplicateDonorCheckerAdmin {
         this.lastCheckData = null;
         this.debounceTimer = null;
         this.currentDonorId = null;
+        this._initialized = false; // Track initialization state
         
         // DOM elements will be set when initialized
         this.formElements = {};
         
-        // Initialize if DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.init());
-        } else {
-            this.init();
+        // Don't auto-initialize - let the admin registration modal control initialization
+        // This prevents multiple initializations when the script is loaded multiple times
+        if (options.autoInit !== false) {
+            // Only auto-init if DOM is ready and form is already present
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    // Check if form exists before initializing
+                    if (document.getElementById('adminDonorPersonalDataForm')) {
+                        this.init();
+                    }
+                });
+            } else {
+                // Check if form exists before initializing
+                if (document.getElementById('adminDonorPersonalDataForm')) {
+                    this.init();
+                }
+            }
         }
     }
     
     /**
      * Initialize the duplicate checker
+     * Only initializes if form elements are found
      */
     init() {
+        // Prevent multiple initializations
+        if (this._initialized) {
+            console.log('Duplicate Donor Checker (Admin): Already initialized, skipping');
+            return;
+        }
+
         const elementsFound = this.setupFormElements();
         this.createModal();
         
         if (elementsFound) {
             this.attachEventListeners();
+            this._initialized = true;
             console.log('Duplicate Donor Checker (Admin) initialized successfully');
         } else {
             console.warn('Duplicate Donor Checker (Admin): Form elements not found during init. Will retry when form loads.');
@@ -48,6 +70,7 @@ class DuplicateDonorCheckerAdmin {
             setTimeout(() => {
                 if (this.setupFormElements()) {
                     this.attachEventListeners();
+                    this._initialized = true;
                     console.log('Duplicate Donor Checker (Admin): Successfully initialized after retry');
                 }
             }, 500);
@@ -264,6 +287,12 @@ class DuplicateDonorCheckerAdmin {
         // Remove existing listeners first to avoid duplicates
         this.removeEventListeners();
         
+        // Prevent attaching listeners multiple times
+        if (this._listenersAttached) {
+            console.log('Duplicate checker (admin): Event listeners already attached, skipping');
+            return;
+        }
+        
         const elements = [
             { el: this.formElements.surname, name: 'surname' },
             { el: this.formElements.firstName, name: 'first_name' },
@@ -274,13 +303,11 @@ class DuplicateDonorCheckerAdmin {
         let attachedCount = 0;
         elements.forEach(({ el, name }) => {
             if (el) {
-                // Create bound handlers
+                // Create bound handlers - removed verbose logging to reduce console noise
                 const inputHandler = () => {
-                    console.log(`Duplicate checker (admin): Input detected on ${name}`);
                     this.scheduleCheck();
                 };
                 const blurHandler = () => {
-                    console.log(`Duplicate checker (admin): Blur detected on ${name}`);
                     this.scheduleCheck();
                 };
                 
@@ -289,10 +316,9 @@ class DuplicateDonorCheckerAdmin {
                 el._duplicateCheckBlurHandler = blurHandler;
                 
                 // Use input event for real-time checking
-                el.addEventListener('input', inputHandler);
+                el.addEventListener('input', inputHandler, { passive: true });
                 el.addEventListener('blur', blurHandler);
                 attachedCount++;
-                console.log(`Duplicate checker (admin): Event listeners attached to ${name}`);
             } else {
                 console.warn(`Duplicate checker (admin): Element ${name} not found for event listener`);
             }
@@ -302,24 +328,24 @@ class DuplicateDonorCheckerAdmin {
         const emailInput = document.getElementById('email');
         if (emailInput) {
             const emailInputHandler = () => {
-                console.log('Duplicate checker (admin): Input detected on email');
                 this.scheduleCheck();
             };
             const emailBlurHandler = () => {
-                console.log('Duplicate checker (admin): Blur detected on email');
                 this.scheduleCheck();
             };
             
             emailInput._duplicateCheckInputHandler = emailInputHandler;
             emailInput._duplicateCheckBlurHandler = emailBlurHandler;
             
-            emailInput.addEventListener('input', emailInputHandler);
+            emailInput.addEventListener('input', emailInputHandler, { passive: true });
             emailInput.addEventListener('blur', emailBlurHandler);
             attachedCount++;
-            console.log('Duplicate checker (admin): Event listeners attached to email');
         }
         
-        console.log(`Duplicate checker (admin): Attached ${attachedCount} event listeners`);
+        if (attachedCount > 0) {
+            console.log(`Duplicate checker (admin): Attached ${attachedCount} event listeners`);
+        }
+        this._listenersAttached = true;
         
         // Note: Form submission is handled by admin-donor-registration-modal.js
         // We don't attach a submit listener here to avoid conflicts
@@ -353,26 +379,47 @@ class DuplicateDonorCheckerAdmin {
             delete emailInput._duplicateCheckInputHandler;
             delete emailInput._duplicateCheckBlurHandler;
         }
+        
+        // Clear debounce timer
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
+        }
+        
+        // Mark listeners as removed
+        this._listenersAttached = false;
     }
     
     /**
      * Schedule a duplicate check with debouncing
      */
     scheduleCheck() {
+        // Prevent scheduling if already checking
+        if (this.isChecking) {
+            return;
+        }
+        
         // Make sure form elements are still available
         if (!this.formElements.form || !this.formElements.surname || !this.formElements.firstName || !this.formElements.birthdate) {
             // Try to re-setup elements
             console.log('Duplicate checker (admin): Re-setting up form elements');
             this.setupFormElements();
+            // If still not available, skip scheduling
+            if (!this.formElements.form || !this.formElements.surname || !this.formElements.firstName || !this.formElements.birthdate) {
+                return;
+            }
         }
         
-        // Clear existing timer
+        // Clear existing timer if one exists
         if (this.debounceTimer) {
             clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
         }
         
         // Schedule new check
         this.debounceTimer = setTimeout(() => {
+            // Clear timer reference before performing check
+            this.debounceTimer = null;
             console.log('Duplicate checker (admin): Performing scheduled check');
             this.performCheck();
         }, this.debounceDelay);
@@ -483,6 +530,13 @@ class DuplicateDonorCheckerAdmin {
         
         // Don't check if already checking
         if (this.isChecking) {
+            console.log('Duplicate checker (admin): Check already in progress, skipping');
+            return Promise.resolve();
+        }
+        
+        // Don't check if a scheduled check is pending (debounce is handling it)
+        if (this.debounceTimer) {
+            console.log('Duplicate checker (admin): Check already scheduled, skipping');
             return Promise.resolve();
         }
         
@@ -524,14 +578,32 @@ class DuplicateDonorCheckerAdmin {
             console.log('Duplicate checker (admin): Check result:', {
                 status: result.status,
                 duplicate_found: result.duplicate_found,
-                message: result.message
+                message: result.message,
+                has_eligibility_history: result.data?.has_eligibility_history
             });
             
             if (result.status === 'success' && result.duplicate_found) {
-                console.log('Duplicate checker (admin): Duplicate found, showing modal');
-                this.showDuplicateAlert(result.data, forceSubmit);
-                // Return promise that resolves when user acknowledges (or rejects if they cancel)
-                return Promise.resolve();
+                // Check if duplicate has donation history
+                const hasDonationHistory = result.data?.has_eligibility_history === true;
+                
+                // Only show modal if duplicate has donation history
+                // If no donation history (new donor), allow proceeding without showing modal
+                if (hasDonationHistory) {
+                    console.log('Duplicate checker (admin): Duplicate found with donation history, showing modal');
+                    this.showDuplicateAlert(result.data, forceSubmit);
+                    // Return promise that resolves when user acknowledges (or rejects if they cancel)
+                    return Promise.resolve();
+                } else {
+                    // Duplicate found but no donation history - allow proceeding without showing modal
+                    console.log('Duplicate checker (admin): Duplicate found but no donation history (new donor), allowing to proceed');
+                    if (forceSubmit) {
+                        // Mark as checked so submission can proceed
+                        if (this.formElements.form) {
+                            this.formElements.form.setAttribute('data-duplicate-checked-admin', 'true');
+                        }
+                    }
+                    return Promise.resolve();
+                }
             } else if (forceSubmit) {
                 // No duplicate found and this was a form submit check, mark as checked
                 console.log('Duplicate checker (admin): No duplicate found, allowing submission');
@@ -559,6 +631,11 @@ class DuplicateDonorCheckerAdmin {
             return Promise.resolve(); // Always resolve, even on error
         } finally {
             this.isChecking = false;
+            // Clear any pending debounce timer if check completed
+            if (this.debounceTimer) {
+                clearTimeout(this.debounceTimer);
+                this.debounceTimer = null;
+            }
         }
     }
     

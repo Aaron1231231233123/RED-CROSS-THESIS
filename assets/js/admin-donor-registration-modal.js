@@ -175,7 +175,7 @@
                         // Wait a bit for the HTML to be fully parsed
                         setTimeout(() => {
                             initializePersonalDataStep();
-                        }, 50);
+                        }, 100);
                     } else if (step === 2) {
                         // Allow inline scripts to register global helpers before initialization
                         setTimeout(() => {
@@ -936,20 +936,56 @@
 
     /**
      * Initialize duplicate checker after the personal data form loads
+     * Ensures only one instance exists and properly cleans up previous instances
      */
     function initializeAdminDuplicateChecker() {
+        // Wait for script to load if not available yet
         if (typeof DuplicateDonorCheckerAdmin === 'undefined') {
-            console.warn('[Admin Registration] Duplicate checker script not loaded');
+            console.warn('[Admin Registration] Duplicate checker script not loaded, waiting...');
+            // Retry after a short delay
+            setTimeout(() => {
+                if (typeof DuplicateDonorCheckerAdmin !== 'undefined') {
+                    initializeAdminDuplicateChecker();
+                } else {
+                    console.error('[Admin Registration] Duplicate checker script failed to load');
+                }
+            }, 200);
             return;
         }
 
         try {
+            // Clean up previous instance if it exists
+            if (window.duplicateDonorCheckerAdmin) {
+                console.log('[Admin Registration] Cleaning up previous duplicate checker instance');
+                // Remove event listeners
+                if (typeof window.duplicateDonorCheckerAdmin.removeEventListeners === 'function') {
+                    window.duplicateDonorCheckerAdmin.removeEventListeners();
+                }
+                // Clear any timers
+                if (window.duplicateDonorCheckerAdmin.debounceTimer) {
+                    clearTimeout(window.duplicateDonorCheckerAdmin.debounceTimer);
+                }
+                // Reset state
+                window.duplicateDonorCheckerAdmin = null;
+            }
+
+            // Create new instance with autoInit disabled since we're controlling initialization
             window.duplicateDonorCheckerAdmin = new DuplicateDonorCheckerAdmin({
                 apiEndpoint: DUPLICATE_CHECK_ENDPOINT,
                 updateApiEndpoint: DUPLICATE_UPDATE_ENDPOINT,
                 enableAutoCheck: true,
-                debounceDelay: 1500
+                debounceDelay: 1500,
+                autoInit: false // We'll call init() manually after form is ready
             });
+            
+            // Manually initialize after a short delay to ensure form elements are in DOM
+            setTimeout(() => {
+                if (window.duplicateDonorCheckerAdmin && typeof window.duplicateDonorCheckerAdmin.init === 'function') {
+                    window.duplicateDonorCheckerAdmin.init();
+                }
+            }, 100);
+            
+            console.log('[Admin Registration] Duplicate checker initialized successfully');
         } catch (error) {
             console.error('[Admin Registration] Failed to initialize duplicate checker', error);
         }
@@ -957,6 +993,7 @@
 
     /**
      * Run duplicate check before advancing past section 2
+     * Optimized with timeout to prevent hanging
      */
     function maybeHandleDuplicateCheck(currentSection, proceedCallback) {
         if (currentSection !== 2) {
@@ -982,18 +1019,43 @@
 
         form.removeAttribute('data-duplicate-checked-admin');
 
+        // Add timeout to duplicate check (max 5 seconds)
+        const checkTimeout = setTimeout(() => {
+            console.warn('Duplicate check timed out, proceeding anyway');
+            form.setAttribute('data-duplicate-checked-admin', 'true');
+            if (nextButton) {
+                nextButton.disabled = false;
+                nextButton.innerHTML = originalText || 'Next >';
+            }
+            proceedCallback();
+        }, 5000);
+
         window.duplicateDonorCheckerAdmin.performCheck(true)
             .then(() => {
+                clearTimeout(checkTimeout);
                 const cleared = form.getAttribute('data-duplicate-checked-admin') === 'true';
                 if (cleared) {
                     form.removeAttribute('data-duplicate-checked-admin');
                     proceedCallback();
+                } else {
+                    // If check didn't complete, proceed anyway after timeout
+                    setTimeout(() => {
+                        if (form.getAttribute('data-duplicate-checked-admin') !== 'true') {
+                            form.setAttribute('data-duplicate-checked-admin', 'true');
+                            proceedCallback();
+                        }
+                    }, 100);
                 }
             })
             .catch((error) => {
+                clearTimeout(checkTimeout);
                 console.error('Duplicate check failed:', error);
+                // Proceed anyway on error
+                form.setAttribute('data-duplicate-checked-admin', 'true');
+                proceedCallback();
             })
             .finally(() => {
+                clearTimeout(checkTimeout);
                 if (nextButton) {
                     nextButton.disabled = false;
                     nextButton.innerHTML = originalText || 'Next >';
@@ -1013,37 +1075,59 @@
             return;
         }
 
-        // Validate all sections
-        const allInputs = form.querySelectorAll('input[required], select[required]');
+        // Quick validation - only check visible/active sections first
+        // This is faster than checking all inputs
+        const activeSection = form.querySelector('.form-section.active');
         let isValid = true;
+        const invalidInputs = [];
 
-        allInputs.forEach(input => {
-            if (!input.value.trim()) {
-                input.classList.add('is-invalid');
-                isValid = false;
-            } else {
-                input.classList.remove('is-invalid');
-            }
-        });
+        if (activeSection) {
+            // Check active section first
+            const activeInputs = activeSection.querySelectorAll('input[required], select[required]');
+            activeInputs.forEach(input => {
+                if (!input.value.trim()) {
+                    input.classList.add('is-invalid');
+                    invalidInputs.push(input);
+                    isValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+        }
+
+        // Only check all sections if active section is valid (optimization)
+        if (isValid) {
+            const allInputs = form.querySelectorAll('input[required], select[required]');
+            allInputs.forEach(input => {
+                if (!input.value.trim()) {
+                    input.classList.add('is-invalid');
+                    invalidInputs.push(input);
+                    isValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+        }
 
         if (!isValid) {
             alert('Please fill in all required fields before submitting.');
-            // Show first section with error
-            for (let i = 1; i <= 5; i++) {
-                const section = document.getElementById(`section${i}`);
-                if (section) {
-                    const invalidInputs = section.querySelectorAll('.is-invalid');
-                    if (invalidInputs.length > 0) {
-                        // Hide all sections
-                        for (let j = 1; j <= 5; j++) {
-                            const s = document.getElementById(`section${j}`);
-                            if (s) s.classList.remove('active');
-                        }
-                        // Show section with error
-                        section.classList.add('active');
-                        updateStepIndicator(1, i);
-                        break;
+            // Show first section with error (optimized - use invalidInputs array)
+            if (invalidInputs.length > 0) {
+                const firstInvalid = invalidInputs[0];
+                const sectionWithError = firstInvalid.closest('.form-section');
+                if (sectionWithError) {
+                    // Hide all sections
+                    for (let j = 1; j <= 5; j++) {
+                        const s = document.getElementById(`section${j}`);
+                        if (s) s.classList.remove('active');
                     }
+                    // Show section with error
+                    sectionWithError.classList.add('active');
+                    const sectionNum = parseInt(sectionWithError.id.replace('section', ''));
+                    updateStepIndicator(1, sectionNum);
+                    // Scroll to first invalid input
+                    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstInvalid.focus();
                 }
             }
             return;
@@ -1075,12 +1159,30 @@
         
         formData.append('step', '1');
 
-        // Submit to API
+        // Submit to API with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
         fetch(SUBMIT_API, {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal
         })
-        .then(response => response.json())
+        .then(response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                return response.text().then(text => {
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(text);
+                    } catch (e) {
+                        errorData = { error: text || `HTTP ${response.status}` };
+                    }
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 // Store donor ID
@@ -1094,8 +1196,17 @@
             }
         })
         .catch(error => {
+            clearTimeout(timeoutId);
             console.error('Error submitting personal data:', error);
-            alert('Error: ' + error.message);
+            
+            let errorMessage = 'An error occurred while submitting the form.';
+            if (error.name === 'AbortError') {
+                errorMessage = 'Request timed out. Please check your connection and try again.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            alert('Error: ' + errorMessage);
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
@@ -1295,6 +1406,19 @@
         currentStep = 1;
         currentDonorId = null;
         window.__adminDonorRegistrationFlow = false;
+        
+        // Clean up duplicate checker instance
+        if (window.duplicateDonorCheckerAdmin) {
+            console.log('[Admin Registration] Cleaning up duplicate checker on modal reset');
+            if (typeof window.duplicateDonorCheckerAdmin.removeEventListeners === 'function') {
+                window.duplicateDonorCheckerAdmin.removeEventListeners();
+            }
+            if (window.duplicateDonorCheckerAdmin.debounceTimer) {
+                clearTimeout(window.duplicateDonorCheckerAdmin.debounceTimer);
+            }
+            window.duplicateDonorCheckerAdmin = null;
+        }
+        
         const modalBody = document.getElementById('adminRegistrationModalBody');
         if (modalBody) {
             modalBody.innerHTML = `
