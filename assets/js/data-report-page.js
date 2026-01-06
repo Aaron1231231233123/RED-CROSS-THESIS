@@ -473,26 +473,36 @@
             const forecastDemandSection = extractForecastDemandSection(forecast, forecast.projected_stock || []);
 
             const html =
+                // I. DONOR DEMOGRAPHICS
+                `<h4 class="report-group-title">I. DONOR DEMOGRAPHICS</h4>` +
                 ageSection +
                 sexSection +
                 locationSection +
                 bloodTypeSection +
                 eligibilitySection +
+                firstRepeatSection +
+                // II. DONATION DATA
+                `<h4 class="report-group-title mt-3">II. DONATION DATA</h4>` +
                 donationsByMonthSection +
                 donationByYearSection +
                 donationsByBloodTypeSection +
                 mobileSection +
                 successSection +
-                firstRepeatSection +
+                // III. HOSPITAL REQUEST DATA
+                `<h4 class="report-group-title mt-3">III. HOSPITAL REQUEST DATA</h4>` +
                 totalRequestsSection +
                 requestsByBloodTypeSection +
                 monthlyTrendSection +
                 reasonsDeclinedSection +
+                // IV. BLOOD INVENTORY STATUS
+                `<h4 class="report-group-title mt-3">IV. BLOOD INVENTORY STATUS</h4>` +
                 currentStockSection +
                 unitsCollectedSection +
                 unitsAllocatedSection +
                 unitsExpiredSection +
                 pendingUnitsSection +
+                // V. FORECASTING DATA
+                `<h4 class="report-group-title mt-3">V. FORECASTING DATA</h4>` +
                 forecastDemandSection;
 
             contentEl.innerHTML = html;

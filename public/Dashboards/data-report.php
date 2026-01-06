@@ -63,6 +63,12 @@ $generatedDate = date('Y-m-d');
         .report-section h4{font-size:1.05rem;font-weight:700;margin-bottom:10px;}
         .report-section table{font-size:.9rem;}
         .report-section table th{background:#f3f4f6;}
+        .report-group-title{
+            font-size:1rem;
+            font-weight:700;
+            text-transform:uppercase;
+            margin:18px 0 8px;
+        }
         /* Chart iframes sized to fit comfortably on screen */
         .chart-frame{
             border:1px solid #e5e7eb;
