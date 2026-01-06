@@ -40,6 +40,38 @@
         return `<table class="table table-bordered table-sm mb-2">${thead}${tbody}</table>`;
     }
 
+    function updateOverviewKpiCards(kpis = {}) {
+        const {
+            total_active_donors = 0,
+            eligible_donors_today = 0,
+            total_blood_units_available = 0,
+            units_nearing_expiry = 0,
+            total_hospital_requests_today = 0,
+        } = kpis || {};
+
+        const mappings = {
+            kpiActiveDonors: total_active_donors,
+            kpiEligibleToday: eligible_donors_today,
+            kpiUnitsAvailable: total_blood_units_available,
+            kpiUnitsNearingExpiry: units_nearing_expiry,
+            kpiHospitalRequestsToday: total_hospital_requests_today,
+        };
+
+        Object.entries(mappings).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = (Number(value) || 0).toLocaleString();
+            }
+        });
+    }
+
+    function updateForecastDemandKpi(summary = {}) {
+        const el = document.getElementById('kpiForecastDemand');
+        if (!el) return;
+        const value = Number(summary.total_forecasted_demand || 0) || 0;
+        el.textContent = value.toLocaleString();
+    }
+
     function buildSection(title, tableHtml, extraHtml = '') {
         return `
             <section class="report-section">
@@ -416,9 +448,12 @@
 
     async function loadDataAndRender() {
         try {
+            const ts = Date.now();
+            // Pass coverageYear to the forecast API so it can reuse the same
+            // per-year cache file and filter its interactive charts consistently.
             const [overviewRes, forecastRes] = await Promise.all([
-                fetch(`${OVERVIEW_API_URL}?ts=${Date.now()}`, { cache: 'no-cache' }),
-                fetch(`${FORECAST_API_URL}?ts=${Date.now()}&scope=summary`, { cache: 'no-cache' }),
+                fetch(`${OVERVIEW_API_URL}?ts=${ts}`, { cache: 'no-cache' }),
+                fetch(`${FORECAST_API_URL}?ts=${ts}&scope=summary&year=${encodeURIComponent(coverageYear)}`, { cache: 'no-cache' }),
             ]);
 
             const overviewText = await overviewRes.text();
@@ -439,6 +474,14 @@
             } catch {
                 console.error('Failed to parse forecast JSON:', forecastText);
                 forecast = { success: false };
+            }
+
+            // Top-level KPIs for the cards at the top of the data report
+            if (overview && overview.success !== false) {
+                updateOverviewKpiCards(overview.kpis || {});
+            }
+            if (forecast && forecast.success !== false) {
+                updateForecastDemandKpi(forecast.summary || {});
             }
 
             const sections = overview.sections || {};
