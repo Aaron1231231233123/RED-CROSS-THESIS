@@ -1210,18 +1210,43 @@ h6 {
                         <span class="inventory-system-stats-label">Blood Donors</span>
                         <span class="inventory-system-stats-value">
                             <?php
-                            // Align Blood Donors count with eligibility-based donor universe
+                            // Align Blood Donors count with the "Total Active Donors" definition
+                            // used in the Reports dashboard (Python model):
+                            // - Look at the latest eligibility row per donor_id
+                            // - A donor is "active" if their latest status is APPROVED / contains "approved"
+                            //   or is exactly "eligible" (case-insensitive)
                             try {
-                                $eligResponse = supabaseRequest("eligibility?select=donor_id&order=donor_id.asc");
-                                $uniqueDonors = [];
-                                if (isset($eligResponse['data']) && is_array($eligResponse['data'])) {
-                                    foreach ($eligResponse['data'] as $row) {
-                                        if (isset($row['donor_id'])) {
-                                            $uniqueDonors[(int)$row['donor_id']] = true;
-                                        }
+                                // Use cachedSupabaseRequest to avoid repeated heavy scans
+                                $eligResponse = cachedSupabaseRequest(
+                                    "eligibility?select=donor_id,status,created_at&order=donor_id.asc,created_at.asc"
+                                );
+
+                                $rows = isset($eligResponse['data']) && is_array($eligResponse['data'])
+                                    ? $eligResponse['data']
+                                    : [];
+
+                                // Track the latest eligibility row per donor_id.
+                                // Because the query is ordered by donor_id,created_at ASC,
+                                // simply overwriting per donor_id gives us the latest record.
+                                $latestByDonor = [];
+                                foreach ($rows as $row) {
+                                    if (!isset($row['donor_id'])) {
+                                        continue;
+                                    }
+                                    $donorId = (int)$row['donor_id'];
+                                    $latestByDonor[$donorId] = $row;
+                                }
+
+                                // Count donors whose latest status is approved/eligible
+                                $totalActive = 0;
+                                foreach ($latestByDonor as $rec) {
+                                    $statusText = strtolower((string)($rec['status'] ?? ''));
+                                    if (strpos($statusText, 'approved') !== false || $statusText === 'eligible') {
+                                        $totalActive++;
                                     }
                                 }
-                                echo count($uniqueDonors);
+
+                                echo $totalActive;
                             } catch (Exception $e) {
                                 // Fallback to previous metric if Supabase call fails
                                 echo $bloodReceivedCount;
