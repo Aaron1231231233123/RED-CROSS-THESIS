@@ -21,6 +21,11 @@
         return num.toLocaleString(undefined, { maximumFractionDigits: 1 });
     }
 
+    function formatPercentage(value = 0) {
+        const num = Number(value) || 0;
+        return `${num.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+    }
+
     function formatMonthLabel(isoMonth) {
         if (!isoMonth) return '';
         const d = new Date(isoMonth);
@@ -87,7 +92,7 @@
         const rows = (ageData?.data || []).map(row => [
             row.age_group || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Age Range', 'Count', 'Percentage'], rows);
         const chart = `<iframe class="chart-frame mt-2" src="../api/forecast-asset.php?asset=donor_age" scrolling="no"></iframe>`;
@@ -98,11 +103,11 @@
         const rows = (sexData?.data || []).map(row => [
             row.sex || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const total = (sexData?.total_donors || 0);
         if (total) {
-            rows.push(['Total', formatNumber(total), '100.0']);
+            rows.push(['Total', formatNumber(total), formatPercentage(100)]);
         }
         const table = buildTable(['Category', 'Count', 'Percentage'], rows);
         const chart = `<iframe class="chart-frame mt-2" src="../api/forecast-asset.php?asset=donor_sex" scrolling="no"></iframe>`;
@@ -113,7 +118,7 @@
         const rows = (locData?.data || []).map((row, idx) => [
             row.location || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`,
+            formatPercentage(row.percentage || 0),
             (idx + 1).toString()
         ]);
         const table = buildTable(['Municipality/Barangay', 'Count', 'Percentage', 'Rank'], rows);
@@ -125,7 +130,7 @@
         const rows = (btData?.data || []).map(row => [
             row.blood_type || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Blood Type', 'Count', 'Percentage'], rows);
         const chart = `<iframe class="chart-frame mt-2" src="../api/forecast-asset.php?asset=donor_blood_type" scrolling="no"></iframe>`;
@@ -136,7 +141,7 @@
         const rows = (eligData?.data || []).map(row => [
             row.eligibility_status || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Status', 'Count', 'Percentage'], rows);
         return buildSection('Donor Eligibility Summary', table);
@@ -218,7 +223,8 @@
             }
             // Avoid "-0" display: treat very small absolute values as 0
             const safePct = Math.abs(pct) < 0.0005 ? 0 : pct;
-            rows.push([`${y}.0`, formatNumber(val), safePct.toFixed(2)]);
+            const percentDisplay = safePct * 100;
+            rows.push([`${y}.0`, formatNumber(val), `${percentDisplay.toFixed(2)}%`]);
             prevVal = val;
         });
         const table = buildTable(['Year', 'Donations', '% Difference'], rows);
@@ -229,7 +235,7 @@
         const rows = (btData?.data || []).map(row => [
             row.blood_type || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Blood Type', 'Total Donations', 'Percentage'], rows);
         return buildSection('Donations by Blood Type', table);
@@ -239,7 +245,7 @@
         const rows = (mobileData?.data || []).map(row => [
             row.donation_type || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Category', 'Count', 'Percentage'], rows);
         const chart = `<iframe class="chart-frame mt-2" src="../api/forecast-asset.php?asset=mobile_vs_inhouse" scrolling="no"></iframe>`;
@@ -250,7 +256,7 @@
         const rows = (successData?.data || []).map(row => [
             row.donation_status || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Category', 'Count', 'Percentage'], rows);
         const chart = `<iframe class="chart-frame mt-2" src="../api/forecast-asset.php?asset=successful_vs_unsuccessful" scrolling="no"></iframe>`;
@@ -261,7 +267,7 @@
         const rows = (freqData?.data || []).map(row => [
             row.donation_frequency === '1st Time' ? 'First-Time' : row.donation_frequency || '',
             formatNumber(row.count || 0),
-            `${formatNumber(row.percentage || 0)}`
+            formatPercentage(row.percentage || 0)
         ]);
         const table = buildTable(['Category', 'Count', 'Percentage'], rows);
         return buildSection('First-Time vs Repeat Donors', table);
@@ -326,7 +332,7 @@
         const rows = rowsSrc.map(r => [
             r.reason || 'Other',
             formatNumber(r.count || 0),
-            `${formatNumber(r.percentage || 0)}`,
+            formatPercentage(r.percentage || 0),
         ]);
         const table = buildTable(['Reason', 'Count', 'Percentage'], rows);
         return buildSection('Reasons for Declined Requests', table);
