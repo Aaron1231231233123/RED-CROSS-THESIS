@@ -122,40 +122,43 @@ class PhysicalExaminationModal {
         const pulseError = document.getElementById('pulse-rate-error');
         const tempError = document.getElementById('body-temp-error');
         
+        // We still track whether values are within the reference ranges so we can
+        // show warnings, but we no longer use this to block navigation.
         let allInRange = true;
         
-        // Check Blood Pressure (Normal: Systolic 90-120, Diastolic 60-100)
+        // Check Blood Pressure (reference: Systolic 90-120, Diastolic 60-100)
         let bpInRange = false;
         if (systolic && diastolic && systolic.value && diastolic.value) {
-            const sys = parseInt(systolic.value);
-            const dia = parseInt(diastolic.value);
+            const sys = parseInt(systolic.value, 10);
+            const dia = parseInt(diastolic.value, 10);
             bpInRange = (sys >= 90 && sys <= 120 && dia >= 60 && dia <= 100);
             if (!bpInRange) {
                 allInRange = false;
                 if (bpError) bpError.style.display = 'block';
-            } else {
-                if (bpError) bpError.style.display = 'none';
+            } else if (bpError) {
+                bpError.style.display = 'none';
             }
-        } else {
-            if (bpError) bpError.style.display = 'none';
+        } else if (bpError) {
+            // Hide BP warning if fields are incomplete
+            bpError.style.display = 'none';
         }
         
-        // Check Pulse Rate (Normal: 60-100 BPM)
+        // Check Pulse Rate (reference: 60-100 BPM)
         let pulseInRange = false;
         if (pulseRate && pulseRate.value) {
-            const pulse = parseInt(pulseRate.value);
+            const pulse = parseInt(pulseRate.value, 10);
             pulseInRange = (pulse >= 60 && pulse <= 100);
             if (!pulseInRange) {
                 allInRange = false;
                 if (pulseError) pulseError.style.display = 'block';
-            } else {
-                if (pulseError) pulseError.style.display = 'none';
+            } else if (pulseError) {
+                pulseError.style.display = 'none';
             }
-        } else {
-            if (pulseError) pulseError.style.display = 'none';
+        } else if (pulseError) {
+            pulseError.style.display = 'none';
         }
         
-        // Check Body Temperature (Normal: 30-37°C)
+        // Check Body Temperature (reference: 30-37°C)
         let tempInRange = false;
         if (bodyTemp && bodyTemp.value) {
             const temp = parseFloat(bodyTemp.value);
@@ -163,17 +166,17 @@ class PhysicalExaminationModal {
             if (!tempInRange) {
                 allInRange = false;
                 if (tempError) tempError.style.display = 'block';
-            } else {
-                if (tempError) tempError.style.display = 'none';
+            } else if (tempError) {
+                tempError.style.display = 'none';
             }
-        } else {
-            if (tempError) tempError.style.display = 'none';
+        } else if (tempError) {
+            tempError.style.display = 'none';
         }
         
-        // Update next button based on validation
+        // Update next button based on whether fields are filled (not on whether values are normal)
         if (nextButton && this.currentStep === 1) {
             // Check if all fields are filled
-            const allFieldsFilled = systolic?.value && diastolic?.value && pulseRate?.value && bodyTemp?.value;
+            const allFieldsFilled = !!(systolic?.value && diastolic?.value && pulseRate?.value && bodyTemp?.value);
             
             // ALWAYS keep button red - never change to green
             nextButton.style.setProperty('background-color', '#b22222', 'important');
@@ -182,14 +185,14 @@ class PhysicalExaminationModal {
             // Remove any success classes that might make it green
             nextButton.classList.remove('btn-success');
             
-            // Button is enabled only if all fields are filled AND all values are in range
-            if (allFieldsFilled && allInRange) {
-                // All values in range and filled: 100% opacity, enabled, red color
+            // Button is enabled once all fields are filled, even if values are out of range.
+            // Out-of-range values will still show warnings beside the fields so staff can
+            // advise the donor to rest and re-check before deciding to proceed or defer.
+            if (allFieldsFilled) {
                 nextButton.style.setProperty('opacity', '1', 'important');
                 nextButton.disabled = false;
                 nextButton.style.cursor = 'pointer';
             } else {
-                // Values out of range or not filled: 20% opacity, disabled, red color
                 nextButton.style.setProperty('opacity', '0.2', 'important');
                 nextButton.disabled = true;
                 nextButton.style.cursor = 'not-allowed';
